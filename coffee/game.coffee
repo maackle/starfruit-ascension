@@ -1,88 +1,211 @@
 game = null
+GFX = null
 
 NotImplemented = {
 
 }
 
-class vec
+class Vec
 
-	constructor: (@x, @y) ->
+	@polar: (r, t) ->
+		x = Math.cos(t) * r
+		y = Math.sin(t) * r
+		new Vec x, y
+
+	constructor: ->
+		if arguments.length == 1
+			v = arguments[0]
+			@x = v.x
+			@y = v.y
+		else if arguments.length == 2
+			[@x, @y] = arguments
 
 	add: (v) ->
-		new vec @x + v.x, @y + v.y
+		@x += v.x
+		@y += v.y
+
 	sub: (v) ->
-		new vec @x - v.x, @y - v.y
+		@x -= v.x
+		@y -= v.y
+
+class Sprite
+
+	constructor: (@im, @offset) ->
+		if not @offset?
+			@offset = 
+				x: 0
+				y: 0
+
+	draw: (pos) ->
+		withImage @im, (im) =>
+			game.ctx.drawImage im, pos.x - @offset.x, pos.y - @offset.y
+
 
 class Thing
 
 	render: -> throw NotImplemented
 	update: -> throw NotImplemented
 
-class Star extends Thing
 
-	@img = makeImage 'img/star-32.png'
+class Branch extends Thing
 
-	offset:
-		x: 15
-		y: 16
+	@all: []
 
-	constructor: (@pos) ->
+	id: null
+	tip: null
+
+	# root is a Vec
+	constructor: (@root, @angle) ->
+
+		@knots = []
+		@branches = []
+		@tip = new Vec @root
+		@knots.push @root
+		Branch.all.push this
+		@id = Branch.all.length
+		@status =
+			rate: Config.growthRate
+			branchAngle: Config.branchAngle
+			branchDistance: Config.branchDistance
+			knotDistance: Config.knotDistance
+			isGrowing: true
+			distanceTravelled: 0
+
+	growthVector: ->
+		Vec.polar @status.rate, @angle
+
+	doFork: ->
+		newRoot = new Vec @tip
+		left = new Branch newRoot, @angle + @status.branchAngle
+		right = new Branch newRoot, @angle - @status.branchAngle
+		@branches = [left, right]
+		@status.isGrowing = false
+
+	doKnot: ->
+		@knots.push new Vec @tip
+		@angle += (Math.random() - 0.5) * Config.knotAngleJitter
 
 	update: ->
-		@pos.y -= 1
+		if @status.isGrowing
+			@status.distanceTravelled += @status.rate
+			@tip.add @growthVector()
+			if @status.distanceTravelled > @status.branchDistance
+				@doFork()
+			else if @status.distanceTravelled > @status.knotDistance
+				@doKnot()
+		else
+			for branch in @branches
+				branch.update()
 
 	render: ->
-		withImage Star.img, (im) =>
-			game.ctx.drawImage im, @pos.x - @offset.x, @pos.y - @offset.y
+		GFX.drawLineString @knots, @tip
+		if @status.isGrowing
+			game.sprites.star.draw @tip
+		else
+			for branch in @branches
+				branch.render()
 
+class GraphicsHelper
 
-class Stalk extends Thing
+	constructor: (@ctx) ->
 
-	leaves: []
+	drawLineString: (points, more...) ->
+		@ctx.beginPath()
+		@ctx.moveTo points[0].x, points[0].y
+		for vec in points[1..]
+			@ctx.lineTo vec.x, vec.y
+		for vec in more
+			@ctx.lineTo vec.x, vec.y
+		@ctx.stroke()
 
-	constructor: ->
+	drawImage: (im, pos, offset) ->
+		if not offset?
+			offset = 
+				x: 0
+				y: 0
+		withImage im, (im) =>
+			@ctx.drawImage im, pos.x - offset.x, pos.y - offset.y
+
+class Viewport
+	
+	constructor: (@canvas, {@anchor, @scroll}) ->
+		@ctx = @canvas.getContext '2d'
+		[w, h] = [@canvas.width, @canvas.height]
+		@offset = [w/2, h/2]	
+	
+	_setTransform: ->
+		[w, h] = [@canvas.width, @canvas.height]
+		@offset = [w/2, h/2]	
+		if 'top' in @anchor
+			@offset[1] = @anchor.top
+		if 'right' in @anchor
+			@offset[0] = w - @anchor.right
+		if 'bottom' in @anchor
+			@offset[1] = h - @anchor.bottom
+		if 'left' in @anchor
+			@offset[0] = @anchor.left
+		[ox, oy] = @offset
+		@ctx.setTransform(1, 0, 0, 1, ox + @scroll.x, oy + @scroll.y)
+
+	clearScreen: (color) ->
+		[w, h] = [@canvas.width, @canvas.height]
+		[ox, oy] = @offset
+		@ctx.setTransform(1, 0, 0, 1, 0, 0)
+		@ctx.fillStyle = color
+		@ctx.fillRect 0, 0, w, h
+		@ctx.restore()
+	
+
+	centerOn: (point) ->
+		[w, h] = [@canvas.width, @canvas.height]
 
 	update: ->
-
-	render: ->
-		# for leaf in @leaves
-			
+		@_setTransform()
 
 
 class Starstalk
 
 	things: []
 	loopInterval: null
-	status:
-		paused: false
+
+	config:
+		fps: 30
+
 
 	constructor: ({@$canvas}) ->
 		@canvas = @$canvas.get(0)
 		@ctx = @canvas.getContext '2d'
+		@GFX = new GraphicsHelper @ctx
+		@status =
+			paused: false
+		@sprites = 
+			star: new Sprite Config.starImage, new Vec(15, 16)
+		@view = new Viewport @canvas,
+			scroll: new Vec 0, 0
+			anchor:
+				bottom: 20
+		
 
 	width: -> @canvas.width
 	height: -> @canvas.height
 
-	clearScreen: (color) ->
-		@ctx.fillStyle = color
-		@ctx.fillRect 0, 0, @width(), @height()
-	
 	start: ->
 		@bindEvents()
 		$(window).trigger 'resize'
-		@clearScreen('blue')
-		@things.push new Star new vec @width()/2, @height()
+		@view.clearScreen('#b5e0e2')
+		@things.push new Branch(new Vec(100, 100), -Math.PI/2)
 
 		@doLoop()
 
 	doLoop: ->
 		@loopInterval = setInterval =>
-			@clearScreen()
+			@view.clearScreen()
+			@view.update()
 			if not @status.paused
 				for thing in @things
 					thing.update()
 					thing.render()
-		, 100
+		, parseInt(1000 / @config.fps)
 
 	togglePause: ->
 		@status.paused = not @status.paused
@@ -94,22 +217,29 @@ class Starstalk
 	bindEvents: ->
 		$(window).on 'resize', (e) =>
 			$body = $('body')
-			console.log 'resized', $body.width()
 			@$canvas.attr
 				width: $body.width()
 				height: $body.height()
-			@clearScreen('pink')
+			@view.clearScreen('pink')
 
 		$(document).on 'keypress', (e) =>
+			console.debug 'key', e.charCode
+
 			switch e.charCode
 				when 32 
 					@togglePause()
+				when 115
+					@scroll.x -= 3
+				when 119
+					@scroll.x += 3
 
 $ ->
 	$body = $('body')
 
 	game = new Starstalk 
 		$canvas: $('#game')
+
+	GFX = game.GFX
 
 	game.start()
 	
