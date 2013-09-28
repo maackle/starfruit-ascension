@@ -1,4 +1,6 @@
 
+lerp = (a,b,t) -> a*(1-t) + b*t
+
 # Ensures that image is loaded before running fn()
 withImage = (im, fn) ->
 	if im.complete

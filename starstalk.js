@@ -1,9 +1,12 @@
 (function() {
-  var Branch, Config, GFX, GraphicsHelper, NotImplemented, Sprite, Starstalk, Thing, Vec, Viewport, game, makeImage, withImage, withImages,
+  var Branch, Config, GFX, GraphicsHelper, NotImplemented, Sprite, Starstalk, Thing, Vec, Viewport, game, lerp, makeImage, withImage, withImages,
     __slice = [].slice,
     __hasProp = {}.hasOwnProperty,
-    __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; },
-    __indexOf = [].indexOf || function(item) { for (var i = 0, l = this.length; i < l; i++) { if (i in this && this[i] === item) return i; } return -1; };
+    __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+  lerp = function(a, b, t) {
+    return a * (1 - t) + b * t;
+  };
 
   withImage = function(im, fn) {
     var existing;
@@ -65,10 +68,11 @@
 
   Config = {
     growthRate: 1,
-    branchAngle: Math.PI / 6,
-    branchDistance: 100,
+    branchAngle: Math.PI / 4,
+    branchAngleUpwardWeight: 0.01,
+    branchDistance: 120,
     knotDistance: 25,
-    knotAngleJitter: Math.PI / 36,
+    knotAngleJitter: Math.PI / 24,
     starImage: makeImage('img/star-32.png')
   };
 
@@ -192,7 +196,8 @@
 
     Branch.prototype.doKnot = function() {
       this.knots.push(new Vec(this.tip));
-      return this.angle += (Math.random() - 0.5) * Config.knotAngleJitter;
+      this.angle += (Math.random() - 0.5) * Config.knotAngleJitter;
+      return this.angle = lerp(this.angle, -Math.PI / 2, Config.branchAngleUpwardWeight);
     };
 
     Branch.prototype.update = function() {
@@ -289,16 +294,16 @@
       var h, ox, oy, w, _ref, _ref1;
       _ref = [this.canvas.width, this.canvas.height], w = _ref[0], h = _ref[1];
       this.offset = [w / 2, h / 2];
-      if (__indexOf.call(this.anchor, 'top') >= 0) {
+      if (this.anchor.top != null) {
         this.offset[1] = this.anchor.top;
       }
-      if (__indexOf.call(this.anchor, 'right') >= 0) {
+      if (this.anchor.right != null) {
         this.offset[0] = w - this.anchor.right;
       }
-      if (__indexOf.call(this.anchor, 'bottom') >= 0) {
+      if (this.anchor.bottom != null) {
         this.offset[1] = h - this.anchor.bottom;
       }
-      if (__indexOf.call(this.anchor, 'left') >= 0) {
+      if (this.anchor.left != null) {
         this.offset[0] = this.anchor.left;
       }
       _ref1 = this.offset, ox = _ref1[0], oy = _ref1[1];
@@ -368,7 +373,7 @@
       this.bindEvents();
       $(window).trigger('resize');
       this.view.clearScreen('#b5e0e2');
-      this.things.push(new Branch(new Vec(100, 100), -Math.PI / 2));
+      this.things.push(new Branch(new Vec(0, 0), -Math.PI / 2));
       return this.doLoop();
     };
 

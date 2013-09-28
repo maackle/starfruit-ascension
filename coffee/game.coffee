@@ -84,6 +84,7 @@ class Branch extends Thing
 	doKnot: ->
 		@knots.push new Vec @tip
 		@angle += (Math.random() - 0.5) * Config.knotAngleJitter
+		@angle = lerp(@angle, -Math.PI/2, Config.branchAngleUpwardWeight)
 
 	update: ->
 		if @status.isGrowing
@@ -135,14 +136,14 @@ class Viewport
 	
 	_setTransform: ->
 		[w, h] = [@canvas.width, @canvas.height]
-		@offset = [w/2, h/2]	
-		if 'top' in @anchor
+		@offset = [w/2, h/2]
+		if @anchor.top?
 			@offset[1] = @anchor.top
-		if 'right' in @anchor
+		if @anchor.right?
 			@offset[0] = w - @anchor.right
-		if 'bottom' in @anchor
+		if @anchor.bottom?
 			@offset[1] = h - @anchor.bottom
-		if 'left' in @anchor
+		if @anchor.left?
 			@offset[0] = @anchor.left
 		[ox, oy] = @offset
 		@ctx.setTransform(1, 0, 0, 1, ox + @scroll.x, oy + @scroll.y)
@@ -193,7 +194,7 @@ class Starstalk
 		@bindEvents()
 		$(window).trigger 'resize'
 		@view.clearScreen('#b5e0e2')
-		@things.push new Branch(new Vec(100, 100), -Math.PI/2)
+		@things.push new Branch(new Vec(0, 0), -Math.PI/2)
 
 		@doLoop()
 
