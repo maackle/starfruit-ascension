@@ -98,6 +98,7 @@ class Viewport
 		@ctx.fillRect 0, 0, w, h
 		@ctx.restore()
 	
+	dimensions: -> [@canvas.width, @canvas.height]
 
 	centerOn: (point) ->
 		[w, h] = [@canvas.width, @canvas.height]

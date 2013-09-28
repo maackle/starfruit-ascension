@@ -6,7 +6,7 @@ class Star extends Thing
 	radius: 16
 	radius2: 8
 
-	constructor: (@pos) ->
+	constructor: (@position) ->
 		@hasFocus = false
 		@angle = 0
 		inc = Math.PI * 2 / 10
@@ -14,7 +14,7 @@ class Star extends Thing
 
 	withTransform: (fn) ->
 		game.ctx.save()
-		game.ctx.translate @pos.x, @pos.y
+		game.ctx.translate @position.x, @position.y
 		game.ctx.rotate @angle
 		fn()
 		game.ctx.restore()
@@ -23,7 +23,7 @@ class Star extends Thing
 
 
 	render: ->
-		# game.sprites.star.draw @pos
+		# game.sprites.star.draw @position
 		@withTransform =>
 			game.ctx.beginPath()
 			GFX.drawLineString @vertices
@@ -68,6 +68,13 @@ class Branch extends Thing
 			distanceTravelled: 0
 			distanceTravelledKnot: 0
 
+	collectStars: ->
+		stars = []
+		stars.push @star if @star?
+		for branch in @branches
+			stars.push star for star in branch.collectStars()
+		stars
+
 	growthVector: ->
 		Vec.polar @status.rate, @angle
 
@@ -77,6 +84,7 @@ class Branch extends Thing
 		right = new Branch newRoot, @angle - @status.branchAngle
 		@branches = [left, right]
 		@status.isGrowing = false
+		@star = null
 
 	doKnot: ->
 		@knots.push (new Vec @tip)
@@ -103,19 +111,10 @@ class Branch extends Thing
 	render: ->
 		game.ctx.save()
 		game.ctx.beginPath()
-		# for k in @knots
-		# 	[point, color] = k
-		# 	game.ctx.lineWidth = 12
-		# 	game.ctx.strokeColor = color
-		# 	game.ctx.fillColor = color
-		# 	game.ctx.lineTo point.x, point.y
-		# 	game.ctx.stroke()
-		# 	game.ctx.beginPath()
-		# 	game.ctx.moveTo point.x, point.y
-		game.ctx.translate -10, 0
-		for i in [0..8]
-			game.ctx.lineWidth = 2
-			game.ctx.translate 2, 0
+		game.ctx.translate -Config.branchWidth*3/4, 0
+		for i in [1..Config.branchFibers]
+			game.ctx.lineWidth = Config.branchWidth
+			game.ctx.translate Config.branchWidth/Config.branchFibers, 0
 			game.ctx.beginPath()
 			GFX.drawLineString @knots, @tip
 			game.ctx.strokeStyle = game.rainbowColors[i*2]
@@ -128,10 +127,30 @@ class Branch extends Thing
 			for branch in @branches
 				branch.render()
 
+class Cloud
+
+	constructor: (@position, @velocity) ->
+
+	update: ->
+		@position.add @velocity
+
+	render: ->
+		game.sprites.cloud.draw @position
+
+	@make: (reference) ->
+		# referece is highestStar position or reference position
+		position = new Vec reference
+		position.y -= game.height()
+		position.x += Math.random() * game.width() - game.width()
+		velocity = new Vec Math.random() * 2, 0
+		new Cloud position, velocity
+
+
 
 class Starstalk
 
 	things: []
+	clouds: []
 	loopInterval: null
 
 	config:
@@ -150,6 +169,7 @@ class Starstalk
 			tailColorIndex: 0  # for iterating over rainbowColors
 		@sprites = 
 			star: new Sprite Config.starImage, new Vec(15, 16)
+			cloud: new Sprite Config.cloudImage, new Vec(15, 16)
 		@view = new Viewport @canvas,
 			scroll: new Vec 0, 0
 			anchor:
@@ -162,20 +182,35 @@ class Starstalk
 		@bindEvents()
 		$(window).trigger 'resize'
 		@stalk = new Branch(new Vec(0, 0), -Math.PI/2)
-		@things.push @stalk
+		@clouds.push new Cloud(new Vec(-100, -100), new Vec(2, 0))
 		@doLoop()
 
 	doLoop: ->
 		@loopInterval = setInterval =>
 			@view.clearScreen('#b5e0e2')
-			@view.update()
+			@update()
+			things = [@stalk]
+			things.push cloud for cloud in @clouds
 			if not @status.paused
-				for thing in @things
+				for thing in things
 					thing.update()
 					thing.render()
 			@status.tailColorIndex += 1
 			@status.tailColorIndex %= @rainbowColors.length
 		, parseInt(1000 / @config.fps)
+
+	update: ->
+		stars = @stalk.collectStars()
+		highestStar = _.min stars, (s) -> s.position.y
+		[w, h] = @view.dimensions()
+		@view.scroll.y = Math.max 0, -h/2 - highestStar.position.y
+		@view.update()
+		if Math.random() < Config.cloudProbability / @config.fps
+			@clouds.push Cloud.make(highestStar.position)
+		for i, cloud in @clouds
+			if cloud.x > @width()
+				@clouds.splice(i, 1)
+
 
 	togglePause: ->
 		@status.paused = not @status.paused
