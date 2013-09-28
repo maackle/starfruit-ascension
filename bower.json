@@ -17,6 +17,7 @@
   "dependencies": {
     "jquery": "~2.0.3",
     "zepto": "~1.0.0",
-    "paper": "~0.9.9"
+    "paper": "~0.9.9",
+    "tinycolor": "~0.9.16"
   }
 }

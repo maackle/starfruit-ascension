@@ -31,6 +31,7 @@ module.exports = (grunt) ->
                     "<%= config.dist %>/starstalk.js": [
                         "<%= config.app %>/coffee/util.coffee",
                         "<%= config.app %>/coffee/config.coffee",
+                        "<%= config.app %>/coffee/classes.coffee",
                         "<%= config.app %>/coffee/game.coffee",
                     ] # // compile and concat into single file
 
