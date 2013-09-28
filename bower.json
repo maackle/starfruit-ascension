@@ -1,0 +1,21 @@
+{
+  "name": "starstalk",
+  "main": "starstalk.js",
+  "version": "0.0.0",
+  "homepage": "https://github.com/maackle/starstalk",
+  "authors": [
+    "Michael Dougherty <michael@lv11.co>"
+  ],
+  "license": "MIT",
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "test",
+    "tests"
+  ],
+  "dependencies": {
+    "jquery": "~2.0.3",
+    "zepto": "~1.0.0"
+  }
+}
