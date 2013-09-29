@@ -375,10 +375,11 @@ class Starstalk
 	doLoop: ->
 		@loopInterval = setInterval =>
 			if @status.gameOver
-				@view.clearScreen(@tailColor())
-				@ctx.strokeStyle = '#333'
-				@ctx.fillStyle = '#333'
+				{r,g,b} = tinycolor(@tailColor()).toRgb()
+				@view.fillScreen("rgba(#{r},#{g},#{b},0.1)")
 				@ctx.lineWidth = 2
+				@ctx.fillStyle = '#222'
+				@ctx.strokeStyle = '#222'
 				@ctx.save()
 				@ctx.setTransform(1, 0, 0, 1, 0, 0)
 				lines = [

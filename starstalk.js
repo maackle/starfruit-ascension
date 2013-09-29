@@ -80,7 +80,8 @@
   atmoscale = 1;
 
   Atmosphere = {
-    tropopause: 12000 * atmoscale,
+    noflyzone: 5000 * atmoscale,
+    tropopause: 18000 * atmoscale,
     stratopause: 40000 * atmoscale,
     mesopause: 75000 * atmoscale,
     exopause: 100000 * atmoscale
@@ -104,6 +105,9 @@
     knotAngleJitter: Math.PI / 24,
     probability: {
       cloud: function(height) {
+        if (height < Atmosphere.noflyzone) {
+          0.66;
+        }
         if (height < Atmosphere.tropopause) {
           return 0.5;
         } else if (height < Atmosphere.stratopause) {
@@ -115,8 +119,12 @@
         }
       },
       balloon: function(height) {
-        if (height < Atmosphere.stratopause) {
-          return 0.55;
+        if (height < Atmosphere.noflyzone) {
+          return 0;
+        } else if (height < Atmosphere.tropopause) {
+          return 0.75;
+        } else if (height < Atmosphere.stratopause) {
+          return 0.15;
         } else {
           return 0;
         }
@@ -131,7 +139,9 @@
       cookie: function(height) {
         var base;
         base = 0.2;
-        if (height > Atmosphere.stratopause) {
+        if (height < Atmosphere.noflyzone) {
+          return 0;
+        } else if (height > Atmosphere.stratopause) {
           return base;
         } else if (height > Atmosphere.mesopause) {
           return base + (height - Atmosphere.mesopause) / Atmosphere.mesopause;
@@ -153,7 +163,7 @@
       y: 16
     },
     atmosphere: {
-      layers: [[atmoscale * 0, tinycolor('#b5e0e2'), 1], [atmoscale * 5000, tinycolor('#b5e0e2'), 1], [Atmosphere.tropopause, tinycolor('#97b2c6'), 0.95], [Atmosphere.stratopause, tinycolor('#778b9b'), 0.9], [Atmosphere.mesopause, tinycolor('#37475b'), 0.7], [Atmosphere.exopause, tinycolor('#0f1419'), 0.0]]
+      layers: [[atmoscale * 0, tinycolor('#b5e0e2'), 1], [Atmosphere.noflyzone, tinycolor('#b5e0e2'), 1], [Atmosphere.tropopause, tinycolor('#97b2c6'), 0.95], [Atmosphere.stratopause, tinycolor('#778b9b'), 0.9], [Atmosphere.mesopause, tinycolor('#37475b'), 0.7], [Atmosphere.exopause, tinycolor('#0f1419'), 0.0]]
     }
   };
 
@@ -333,12 +343,22 @@
     };
 
     Viewport.prototype.clearScreen = function(color) {
-      var h, ox, oy, w, _ref, _ref1;
+      var h, w, _ref;
       _ref = [this.canvas.width, this.canvas.height], w = _ref[0], h = _ref[1];
-      _ref1 = this.offset, ox = _ref1[0], oy = _ref1[1];
+      this.ctx.save();
       this.ctx.setTransform(1, 0, 0, 1, 0, 0);
       this.ctx.fillStyle = color;
       this.ctx.clearRect(0, 0, w, h);
+      this.ctx.fillRect(0, 0, w, h);
+      return this.ctx.restore();
+    };
+
+    Viewport.prototype.fillScreen = function(color) {
+      var h, w, _ref;
+      _ref = [this.canvas.width, this.canvas.height], w = _ref[0], h = _ref[1];
+      this.ctx.save();
+      this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+      this.ctx.fillStyle = color;
       this.ctx.fillRect(0, 0, w, h);
       return this.ctx.restore();
     };
@@ -956,12 +976,13 @@
     Starstalk.prototype.doLoop = function() {
       var _this = this;
       return this.loopInterval = setInterval(function() {
-        var cloud, color, font, height, line, lines, obstacle, star, text, thing, things, width, x, y, _i, _j, _k, _l, _len, _len1, _len2, _len3, _len4, _m, _ref, _ref1, _ref2;
+        var b, cloud, color, font, g, height, line, lines, obstacle, r, star, text, thing, things, width, x, y, _i, _j, _k, _l, _len, _len1, _len2, _len3, _len4, _m, _ref, _ref1, _ref2, _ref3;
         if (_this.status.gameOver) {
-          _this.view.clearScreen(_this.tailColor());
-          _this.ctx.strokeStyle = '#333';
-          _this.ctx.fillStyle = '#333';
+          _ref = tinycolor(_this.tailColor()).toRgb(), r = _ref.r, g = _ref.g, b = _ref.b;
+          _this.view.fillScreen("rgba(" + r + "," + g + "," + b + ",0.1)");
           _this.ctx.lineWidth = 2;
+          _this.ctx.fillStyle = '#222';
+          _this.ctx.strokeStyle = '#222';
           _this.ctx.save();
           _this.ctx.setTransform(1, 0, 0, 1, 0, 0);
           lines = [
@@ -1004,19 +1025,19 @@
           _this.handleObstacles();
           _this.applyInput();
           things = [_this.stalk];
-          _ref = _this.stars;
-          for (_j = 0, _len1 = _ref.length; _j < _len1; _j++) {
-            star = _ref[_j];
+          _ref1 = _this.stars;
+          for (_j = 0, _len1 = _ref1.length; _j < _len1; _j++) {
+            star = _ref1[_j];
             things.push(star);
           }
-          _ref1 = _this.clouds;
-          for (_k = 0, _len2 = _ref1.length; _k < _len2; _k++) {
-            cloud = _ref1[_k];
+          _ref2 = _this.clouds;
+          for (_k = 0, _len2 = _ref2.length; _k < _len2; _k++) {
+            cloud = _ref2[_k];
             things.push(cloud);
           }
-          _ref2 = _this.obstacles;
-          for (_l = 0, _len3 = _ref2.length; _l < _len3; _l++) {
-            obstacle = _ref2[_l];
+          _ref3 = _this.obstacles;
+          for (_l = 0, _len3 = _ref3.length; _l < _len3; _l++) {
+            obstacle = _ref3[_l];
             things.push(obstacle);
           }
           if (!_this.status.paused) {

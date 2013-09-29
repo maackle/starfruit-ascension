@@ -111,10 +111,18 @@ class Viewport
 
 	clearScreen: (color) ->
 		[w, h] = [@canvas.width, @canvas.height]
-		[ox, oy] = @offset
+		@ctx.save()
 		@ctx.setTransform(1, 0, 0, 1, 0, 0)
 		@ctx.fillStyle = color
 		@ctx.clearRect 0, 0, w, h
+		@ctx.fillRect 0, 0, w, h
+		@ctx.restore()
+
+	fillScreen: (color) ->
+		[w, h] = [@canvas.width, @canvas.height]
+		@ctx.save()
+		@ctx.setTransform(1, 0, 0, 1, 0, 0)
+		@ctx.fillStyle = color
 		@ctx.fillRect 0, 0, w, h
 		@ctx.restore()
 	

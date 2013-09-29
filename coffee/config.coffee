@@ -1,6 +1,7 @@
 atmoscale = 1
 Atmosphere = 
-	tropopause: 12000 * atmoscale
+	noflyzone: 5000 * atmoscale
+	tropopause: 18000 * atmoscale
 	stratopause: 40000 * atmoscale
 	mesopause: 75000 * atmoscale
 	exopause: 100000 * atmoscale
@@ -29,19 +30,23 @@ Config =
 	probability:
 		cloud: (height) ->
 			# return 1
+			if height < Atmosphere.noflyzone then 0.66
 			if height < Atmosphere.tropopause then 0.5
 			else if height < Atmosphere.stratopause then 1.25
 			else if height < Atmosphere.mesopause then 0.33
 			else 0
 		balloon: (height) ->
-			if height < Atmosphere.stratopause then 0.55
+			if height < Atmosphere.noflyzone then 0
+			else if height < Atmosphere.tropopause then 0.75
+			else if height < Atmosphere.stratopause then 0.15
 			else 0
 		satellite: (height) ->
 			if height > Atmosphere.stratopause then 0.75
 			else 0
 		cookie: (height) ->
 			base = 0.2
-			if height > Atmosphere.stratopause then base
+			if height < Atmosphere.noflyzone then 0
+			else if height > Atmosphere.stratopause then base
 			else if height > Atmosphere.mesopause then base + (height - Atmosphere.mesopause) / Atmosphere.mesopause
 			else 0.05
 
@@ -63,7 +68,7 @@ Config =
 	atmosphere:
 		layers: [
 			[atmoscale*0,		(tinycolor '#b5e0e2'), 1],
-			[atmoscale*5000, 	(tinycolor '#b5e0e2'), 1],
+			[Atmosphere.noflyzone,	 	(tinycolor '#b5e0e2'), 1],
 			[Atmosphere.tropopause,		(tinycolor '#97b2c6'), 0.95],	# tropopause
 			[Atmosphere.stratopause, 	(tinycolor '#778b9b'), 0.9],	# stratopause
 			[Atmosphere.mesopause, 		(tinycolor '#37475b'), 0.7],	# mesopause
