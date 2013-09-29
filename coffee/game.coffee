@@ -9,6 +9,7 @@ class Collidable extends Thing
 	position: null
 	
 	constructor: ->
+		@angle = 0
 		[w, h] = @dimensions
 		@box = 
 			left: @position.x - @offset.x
@@ -23,36 +24,87 @@ class Collidable extends Thing
 		if @isActiveCollider
 			quadtree.insert @box
 
+	withTransform: (fn) ->
+		game.ctx.save()
+		game.ctx.translate @position.x, @position.y  # offset correction happens when drawing the sprite.
+		game.ctx.rotate @angle
+		# game.ctx.translate -@offset.x, -@offset.y
+		fn()
+		game.ctx.restore()
+
 
 class Obstacle extends Collidable
 
 	isActiveCollider: true
 
 	constructor: (@position, @velocity) ->
+		@angle = 0
 		super()
 
 	update: ->
 		@position.add @velocity
 		super()
 
-class Pegasus extends Obstacle
+class Cookie extends Obstacle
+
+	dimensions: [140, 140]
+	offset: {x: 70, y: 70}
+
+	constructor: (pos, vel) ->
+		super(pos, vel)
+		@angVel = Math.random() * 0.05
+
+	update: ->
+		@angle += @angVel
+		super()
+
+	render: ->
+		game.sprites.cookie.draw(@position, @angle)
 
 class Satellite extends Obstacle
 	# dimensions: [120, 120]
 	dimensions: [80, 80]
 	offset: {x: 40, y: 40}
 
-	render: ->
-		game.sprites.satellite.draw @position
+	constructor: (pos, vel) ->
+		super(pos, vel)
+		@angVel = Math.random() * 0.05
 
+	update: ->
+		@angle += @angVel
+		super()
+
+	render: ->
+		game.sprites.satellite.draw(@position, @angle)
+
+balloonTopDim = {x: 90, y: 126}
+balloonAABBDim = {x: 75, y: 75}
+balloonSpriteOffset = {x: 44, y: 62}
+balloonAABBOffset = 
+	x: balloonSpriteOffset.x - (balloonTopDim.x - balloonAABBDim.x)/2
+	y: balloonSpriteOffset.y - (balloonTopDim.y - balloonAABBDim.y)/2
 
 class Balloon extends Obstacle
 	# dimensions: [90, 180]
-	dimensions: [70, 140]
-	offset: {x: 35, y: 90}
+	dimensions: [balloonAABBDim.x, balloonAABBDim.y]
+	offset: balloonAABBOffset
+	angAccel: 0.003
+
+	constructor: (pos, vel) ->
+		super(pos, vel)
+		@angle = Math.random() * Math.PI / 4
+		@angVel = Math.random() * 0.05
+
+	update: ->
+		super()
+		if @angle < 0
+			@angVel += @angAccel
+		else
+			@angVel -= @angAccel
+		@angle += @angVel
 
 	render: ->
-		game.sprites.balloon.draw @position
+		game.sprites.balloon.draw(@position, @angle)
 
 class Cloud extends Collidable
 
@@ -71,8 +123,6 @@ class Cloud extends Collidable
 
 	render: ->
 		game.sprites.cloud.draw @position
-
-class Meteor extends Obstacle
 
 class Star extends Collidable
 
@@ -287,8 +337,9 @@ class Starstalk
 		@sprites = 
 			star: new Sprite Config.starImage, Config.starOffset
 			cloud: new Sprite Config.cloudImage
-			balloon: new Sprite Config.balloonImage
+			balloon: new Sprite Config.balloonImage, balloonSpriteOffset
 			satellite: new Sprite Config.satelliteImage
+			cookie: new Sprite Config.cookieImage
 		@view = new Viewport @canvas,
 			scroll: new Vec 0, 0
 			anchor:
@@ -397,6 +448,7 @@ class Starstalk
 
 	handleCollision: ->
 
+		bounds = @view.worldBounds()
 		collidable = []
 		collidable.push star for star in @stars
 		collidable.push o for o in @obstacles
@@ -411,6 +463,19 @@ class Starstalk
 				allDeadStars.push star for star in deadStars if star not in allDeadStars
 		for star in allDeadStars when not (star.id in safeStarIDs) and not star.isSafe()
 			star.branch.doStop()
+		for star in @stars
+			pos = new Vec star.position
+			dist = pos.sub(@status.highestStar.position).length()
+			if dist > @maxAbsoluteDistanceBeforeDeath()
+				console.log 'death by distance', dist
+				star.branch.doStop()
+			else if star.position.x < bounds.left - Config.autokillOffscreenX or star.position.x > bounds.left + bounds.width + Config.autokillOffscreenX
+
+				console.log 'death by X'
+				star.branch.doStop()
+
+	maxAbsoluteDistanceBeforeDeath: ->
+		Config.autokillDistanceRatio * Math.max(@canvas.width, @canvas.height)
 
 	handleObstacles: ->
 		height = @status.heightAchieved
@@ -422,15 +487,15 @@ class Starstalk
 		if Math.random() < Config.probability.cloud(height) / @config.fps
 			velocity = new Vec Math.random() * 3, 0
 			@clouds.push new Cloud position, velocity
-			console.log position
 		else if Math.random() < Config.probability.balloon(height) / @config.fps
 			velocity = new Vec Math.random() * 2, 0
 			@obstacles.push new Balloon position, velocity
-			console.log position
 		else if Math.random() < Config.probability.satellite(height) / @config.fps
 			velocity = new Vec Math.random() * 4, 0
 			@obstacles.push new Satellite position, velocity
-			console.log position
+		else if Math.random() < Config.probability.cookie(height) / @config.fps
+			velocity = new Vec Math.random() * 4, 0
+			@obstacles.push new Cookie position, velocity
 
 		for i, cloud in @clouds
 			if cloud.x > @width()

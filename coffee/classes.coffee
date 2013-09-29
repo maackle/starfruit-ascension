@@ -5,6 +5,10 @@ NotImplemented = {
 
 class Vec
 
+	@zero: 
+		x: 0
+		y: 0
+
 	@polar: (r, t) ->
 		x = Math.cos(t) * r
 		y = Math.sin(t) * r
@@ -21,10 +25,12 @@ class Vec
 	add: (v) ->
 		@x += v.x
 		@y += v.y
+		this
 
 	sub: (v) ->
 		@x -= v.x
 		@y -= v.y
+		this
 
 	lengthSquared: ->
 		return @x*@x + @y*@y
@@ -39,14 +45,20 @@ class Sprite
 
 	constructor: (@im, @offset) ->
 		if not @offset?
+			console.warn 'no offset set', this
 			withImage @im, (im) =>
 				@offset = 
 					x: @im.width / 2
 					y: @im.height / 2
 
-	draw: (pos) ->
+	draw: (pos, angle) ->
+		pos ?= Vec.zero
 		withImage @im, (im) =>
-			game.ctx.drawImage im, pos.x - @offset.x, pos.y - @offset.y
+			game.ctx.save()
+			game.ctx.translate pos.x + 0*@offset.x, pos.y + 0*@offset.y
+			game.ctx.rotate(angle)
+			game.ctx.drawImage im, - @offset.x, - @offset.y
+			game.ctx.restore()
 
 
 class Thing
