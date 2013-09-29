@@ -4,6 +4,8 @@ GFX = null
 quadtree = Quadtree.create(1000, 100000)
 quadtree.reset()
 
+
+
 class Collidable extends Thing
 
 	position: null
@@ -24,20 +26,13 @@ class Collidable extends Thing
 		if @isActiveCollider
 			quadtree.insert @box
 
-	withTransform: (fn) ->
-		game.ctx.save()
-		game.ctx.translate @position.x, @position.y  # offset correction happens when drawing the sprite.
-		game.ctx.rotate @angle
-		# game.ctx.translate -@offset.x, -@offset.y
-		fn()
-		game.ctx.restore()
-
 
 class Obstacle extends Collidable
 
 	isActiveCollider: true
 
 	constructor: (@position, @velocity) ->
+		@velocity ?= new Vec 0, 0
 		@angle = 0
 		super()
 
@@ -115,6 +110,7 @@ class Cloud extends Collidable
 		y: 96/2
 
 	constructor: (@position, @velocity) ->
+		@velocity ?= new Vec 0, 0
 		super()
 
 	update: ->
@@ -129,8 +125,6 @@ class Star extends Collidable
 	@all: []
 
 	id: null
-	radius: 16
-	radius2: 8
 	dimensions: [32, 32]
 	offset: Config.starOffset
 	attraction: null
@@ -140,20 +134,11 @@ class Star extends Collidable
 		super()
 		@hasFocus = false
 		@angle = 0
-		inc = Math.PI * 2 / 10
-		@vertices = (Vec.polar (if i % 2 == 0 then @radius else @radius2), i * inc for i in [0..10])
 		Star.all.push this
 		@id = Star.all.length
 
 	setAttraction: (vec) ->
 		@attraction = vec
-
-	withTransform: (fn) ->
-		game.ctx.save()
-		game.ctx.translate @position.x, @position.y  # offset correction happens when drawing the sprite.
-		game.ctx.rotate @angle
-		fn()
-		game.ctx.restore()
 
 	update: ->
 		super()
@@ -167,19 +152,30 @@ class Star extends Collidable
 		@position = @branch.tip
 		@branch.star = this
 
+	withTransform: (fn) ->
+		game.ctx.save()
+		game.ctx.translate @position.x, @position.y  # offset correction happens when drawing the sprite.
+		game.ctx.rotate @angle
+		# game.ctx.translate -@offset.x, -@offset.y
+		fn()
+		game.ctx.restore()
 	render: ->
 		@withTransform =>
 			game.ctx.beginPath()
-			GFX.drawLineString @vertices
+			GFX.drawLineString Star.vertices
 			if @isSafe()
-				game.ctx.fillStyle = 'black'
+				game.ctx.strokeStyle = game.tailColor(3)
+				game.ctx.fillStyle = game.tailColor(12)
 			else
+				game.ctx.strokeStyle = game.tailColor()
 				game.ctx.fillStyle = 'white'
-			game.ctx.strokeStyle = game.tailColor()
 			game.ctx.lineWidth = 2
 			game.ctx.fill()
 			game.ctx.stroke()
 
+Star.radius = 16
+Star.radius2 = 8
+Star.vertices = (Vec.polar (if i % 2 == 0 then Star.radius else Star.radius2), i * (Math.PI * 2 / 10) for i in [0..10])
 
 class Branch extends Thing
 
@@ -246,6 +242,7 @@ class Branch extends Thing
 		@status.isGrowing = false
 		@status.isDead = true
 		game.stars = _.without game.stars, @star
+		game.novae.push new Nova( (new Vec @star.position), @star.angle)
 		delete @star
 		if game.stars.length == 0
 			game.showGameOver()
@@ -311,10 +308,35 @@ class Branch extends Thing
 				branch.render()
 
 
+class Nova extends Thing
+
+	constructor: (@position, @angle) ->
+		@scale = 1.0
+		@time = 0
+
+	update: (speedMod=1)->
+		@scale += 10 * speedMod
+		@time += 1 / game.config.fps * speedMod
+		if @time > Config.starNovaTime
+			@die()
+
+	die: ->
+		game.novae = _.without game.novae, this
+
+	render: ->
+		@withTransform =>
+			game.ctx.beginPath()
+			game.ctx.lineWidth = 2
+			GFX.drawLineString Star.vertices
+			game.ctx.strokeStyle = game.tailColor(10)
+			game.ctx.stroke()
+
+
 class Starstalk
 
 	things: []
 	clouds: []
+	novae: []
 	loopInterval: null
 
 	config:
@@ -376,16 +398,19 @@ class Starstalk
 		@loopInterval = setInterval =>
 			if @status.gameOver
 				{r,g,b} = tinycolor(@tailColor()).toRgb()
-				@view.fillScreen("rgba(#{r},#{g},#{b},0.1)")
-				@ctx.lineWidth = 2
+				@view.fillScreen("rgba(#{r},#{g},#{b},0.5)")
+				for nova in game.novae
+					nova.update(0.25)
+					nova.render()
+				@ctx.lineWidth = 1.5
 				@ctx.fillStyle = '#222'
 				@ctx.strokeStyle = '#222'
 				@ctx.save()
 				@ctx.setTransform(1, 0, 0, 1, 0, 0)
 				lines = [
-					{ text: "YOU ASCENDED", font: "60px Arial", height: 60 }
-					{ text: "#{parseInt(@status.heightAchieved)} meters", font: "80px Arial", height: 80 }
-					{ text: "click to begin anew", font: "60px Arial", height: 80, color: 'white' }
+					{ text: "YOU ASCENDED", font: "70px #{Config.mainFont}", height: 70 }
+					{ text: "#{parseInt(@status.heightAchieved)} meters", font: "100px #{Config.mainFont}", height: 100 }
+					{ text: "click to begin anew", font: "80px #{Config.mainFont}", height: 100, color: 'white' }
 				]
 				y = 100
 				for line in lines
@@ -397,7 +422,7 @@ class Starstalk
 					{width} = @ctx.measureText(text)
 					x = @canvas.width / 2 - width / 2
 					y += height * 1.5
-					@ctx.fillText(text, x, y)
+					# @ctx.fillText(text, x, y)
 					@ctx.strokeText(text, x, y)
 
 				@ctx.restore()
@@ -411,6 +436,7 @@ class Starstalk
 				things = [@stalk]
 				things.push star for star in @stars
 				things.push cloud for cloud in @clouds
+				things.push nova for nova in @novae
 				things.push obstacle for obstacle in @obstacles
 				if not @status.paused
 					for thing in things
@@ -423,14 +449,14 @@ class Starstalk
 		, parseInt(1000 / @config.fps)
 
 	render: ->
-		@ctx.font = "60px Arial"
+		@ctx.font = "60px #{Config.hudFont}"
 		@ctx.strokeStyle = '#333'
 		@ctx.fillStyle = '#eee'
-		@ctx.lineWidth = 2
+		@ctx.lineWidth = 1.5
 		@ctx.save()
 		@ctx.setTransform(1, 0, 0, 1, 0, 0)
 		@ctx.fillText(parseInt(@status.heightAchieved) + 'm', 50, 100)
-		@ctx.strokeText(parseInt(@status.heightAchieved) + 'm', 50, 100)
+		# @ctx.strokeText(parseInt(@status.heightAchieved) + 'm', 50, 100)
 		@ctx.restore()
 
 		if Config.debugDraw
@@ -468,11 +494,8 @@ class Starstalk
 			pos = new Vec star.position
 			dist = pos.sub(@status.highestStar.position).length()
 			if dist > @maxAbsoluteDistanceBeforeDeath()
-				console.log 'death by distance', dist
 				star.branch.doStop()
 			else if star.position.x < bounds.left - Config.autokillOffscreenX or star.position.x > bounds.left + bounds.width + Config.autokillOffscreenX
-
-				console.log 'death by X'
 				star.branch.doStop()
 
 	maxAbsoluteDistanceBeforeDeath: ->
@@ -509,7 +532,10 @@ class Starstalk
 		[w, h] = @view.dimensions()
 		stars = @stalk.collectStars()
 		@stars = stars
-		highestStar = _.min stars, (s) -> s.position.y
+		if stars.length == 1
+			highestStar = stars[0]
+		else
+			highestStar = _.min stars, (s) -> s.position.y
 		newHeight = -highestStar.position.y
 		@status.heightAchieved = newHeight if newHeight > @status.heightAchieved
 		@status.highestStar = highestStar
@@ -526,8 +552,8 @@ class Starstalk
 		else
 			@doLoop()
 
-	tailColor: ->
-		return @rainbowColors[@status.tailColorIndex]
+	tailColor: (factor=1) ->
+		return @rainbowColors[(@status.tailColorIndex * factor) % @rainbowColors.length]
 
 	bindEvents: ->
 		$(window).on 'resize', (e) =>
@@ -545,8 +571,8 @@ class Starstalk
 					@canvas.mozRequestFullScreen()
 
 		$(@canvas).on 'mousemove', (e) =>
-			@mouse.x = e.offsetX
-			@mouse.y = e.offsetY
+			@mouse.x = e.offsetX or e.layerX
+			@mouse.y = e.offsetY or e.layerY
 		
 		$(@canvas).on 'mousedown', (e) =>
 			if e.which == 1
@@ -611,6 +637,16 @@ newGame = ->
 	world = game.world
 
 	game.start()
+
+# titleScreen = ->
+# 	canvas = $('#game').get(0)
+# 	ctx = canvas.getContext '2d'
+
+# 	$('#game').on 'click' ->
+# 		$(this).off 'click'
+
+# 		newGame()
+
 
 $ ->
 	$body = $('body')

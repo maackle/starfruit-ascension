@@ -63,8 +63,22 @@ class Sprite
 
 class Thing
 
+	angle: 0.0
+	scale: 1.0
+	position: null
+
 	render: -> throw NotImplemented
 	update: -> throw NotImplemented
+	
+	withTransform: (fn) ->
+		game.ctx.save()
+		game.ctx.translate @position.x, @position.y  # offset correction happens when drawing the sprite.
+		game.ctx.rotate @angle
+		game.ctx.scale @scale, @scale
+		# game.ctx.translate -@offset.x, -@offset.y
+		fn()
+		game.ctx.restore()
+
 
 
 class GraphicsHelper

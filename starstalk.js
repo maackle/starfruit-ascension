@@ -1,5 +1,5 @@
 (function() {
-  var Atmosphere, Balloon, Branch, Cloud, Collidable, Config, Cookie, GFX, GraphicsHelper, NotImplemented, Obstacle, Satellite, Sprite, Star, Starstalk, Thing, Vec, Viewport, atmoscale, balloonAABBDim, balloonAABBOffset, balloonSpriteOffset, balloonTopDim, clampAngleSigned, game, lerp, makeImage, newGame, quadtree, withImage, withImages, world,
+  var Atmosphere, Balloon, Branch, Cloud, Collidable, Config, Cookie, GFX, GraphicsHelper, NotImplemented, Nova, Obstacle, Satellite, Sprite, Star, Starstalk, Thing, Vec, Viewport, atmoscale, balloonAABBDim, balloonAABBOffset, balloonSpriteOffset, balloonTopDim, clampAngleSigned, game, i, lerp, makeImage, newGame, quadtree, withImage, withImages, world,
     __slice = [].slice,
     __hasProp = {}.hasOwnProperty,
     __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; },
@@ -77,7 +77,7 @@
     return im;
   };
 
-  atmoscale = 1;
+  atmoscale = 1.0 / 2.0;
 
   Atmosphere = {
     noflyzone: 5000 * atmoscale,
@@ -88,6 +88,8 @@
   };
 
   Config = {
+    mainFont: 'Monoton',
+    hudFont: 'Offside',
     growthRate: 15,
     starThrustRate: 18,
     autoFork: true,
@@ -98,7 +100,7 @@
     branchDistanceMax: 3000,
     branchFibers: 3,
     branchWidth: 10,
-    autokillDistanceRatio: 1.5,
+    autokillDistanceRatio: 1.25,
     autokillOffscreenX: 600,
     knotDistance: 100,
     knotDistanceWhileThrusting: 50,
@@ -106,9 +108,8 @@
     probability: {
       cloud: function(height) {
         if (height < Atmosphere.noflyzone) {
-          0.66;
-        }
-        if (height < Atmosphere.tropopause) {
+          return 0.66;
+        } else if (height < Atmosphere.tropopause) {
           return 0.5;
         } else if (height < Atmosphere.stratopause) {
           return 1.25;
@@ -150,9 +151,9 @@
         }
       }
     },
-    starSafetyDistance: 128,
     starNovaRadius: 32,
-    starNovaTime: 1,
+    starNovaTime: 1.5,
+    starSafetyDistance: 128,
     starImage: makeImage('img/star-32.png'),
     cloudImage: makeImage('img/cloud-4-a.png'),
     balloonImage: makeImage('img/balloon.png'),
@@ -258,12 +259,27 @@
   Thing = (function() {
     function Thing() {}
 
+    Thing.prototype.angle = 0.0;
+
+    Thing.prototype.scale = 1.0;
+
+    Thing.prototype.position = null;
+
     Thing.prototype.render = function() {
       throw NotImplemented;
     };
 
     Thing.prototype.update = function() {
       throw NotImplemented;
+    };
+
+    Thing.prototype.withTransform = function(fn) {
+      game.ctx.save();
+      game.ctx.translate(this.position.x, this.position.y);
+      game.ctx.rotate(this.angle);
+      game.ctx.scale(this.scale, this.scale);
+      fn();
+      return game.ctx.restore();
     };
 
     return Thing;
@@ -438,14 +454,6 @@
       }
     };
 
-    Collidable.prototype.withTransform = function(fn) {
-      game.ctx.save();
-      game.ctx.translate(this.position.x, this.position.y);
-      game.ctx.rotate(this.angle);
-      fn();
-      return game.ctx.restore();
-    };
-
     return Collidable;
 
   })(Thing);
@@ -458,6 +466,9 @@
     function Obstacle(position, velocity) {
       this.position = position;
       this.velocity = velocity;
+      if (this.velocity == null) {
+        this.velocity = new Vec(0, 0);
+      }
       this.angle = 0;
       Obstacle.__super__.constructor.call(this);
     }
@@ -595,6 +606,9 @@
     function Cloud(position, velocity) {
       this.position = position;
       this.velocity = velocity;
+      if (this.velocity == null) {
+        this.velocity = new Vec(0, 0);
+      }
       Cloud.__super__.constructor.call(this);
     }
 
@@ -618,10 +632,6 @@
 
     Star.prototype.id = null;
 
-    Star.prototype.radius = 16;
-
-    Star.prototype.radius2 = 8;
-
     Star.prototype.dimensions = [32, 32];
 
     Star.prototype.offset = Config.starOffset;
@@ -631,35 +641,17 @@
     Star.prototype.isActiveCollider = true;
 
     function Star(position, branch) {
-      var i, inc;
       this.position = position;
       this.branch = branch;
       Star.__super__.constructor.call(this);
       this.hasFocus = false;
       this.angle = 0;
-      inc = Math.PI * 2 / 10;
-      this.vertices = (function() {
-        var _i, _results;
-        _results = [];
-        for (i = _i = 0; _i <= 10; i = ++_i) {
-          _results.push(Vec.polar((i % 2 === 0 ? this.radius : this.radius2), i * inc));
-        }
-        return _results;
-      }).call(this);
       Star.all.push(this);
       this.id = Star.all.length;
     }
 
     Star.prototype.setAttraction = function(vec) {
       return this.attraction = vec;
-    };
-
-    Star.prototype.withTransform = function(fn) {
-      game.ctx.save();
-      game.ctx.translate(this.position.x, this.position.y);
-      game.ctx.rotate(this.angle);
-      fn();
-      return game.ctx.restore();
     };
 
     Star.prototype.update = function() {
@@ -677,17 +669,26 @@
       return this.branch.star = this;
     };
 
+    Star.prototype.withTransform = function(fn) {
+      game.ctx.save();
+      game.ctx.translate(this.position.x, this.position.y);
+      game.ctx.rotate(this.angle);
+      fn();
+      return game.ctx.restore();
+    };
+
     Star.prototype.render = function() {
       var _this = this;
       return this.withTransform(function() {
         game.ctx.beginPath();
-        GFX.drawLineString(_this.vertices);
+        GFX.drawLineString(Star.vertices);
         if (_this.isSafe()) {
-          game.ctx.fillStyle = 'black';
+          game.ctx.strokeStyle = game.tailColor(3);
+          game.ctx.fillStyle = game.tailColor(12);
         } else {
+          game.ctx.strokeStyle = game.tailColor();
           game.ctx.fillStyle = 'white';
         }
-        game.ctx.strokeStyle = game.tailColor();
         game.ctx.lineWidth = 2;
         game.ctx.fill();
         return game.ctx.stroke();
@@ -697,6 +698,19 @@
     return Star;
 
   })(Collidable);
+
+  Star.radius = 16;
+
+  Star.radius2 = 8;
+
+  Star.vertices = (function() {
+    var _i, _results;
+    _results = [];
+    for (i = _i = 0; _i <= 10; i = ++_i) {
+      _results.push(Vec.polar((i % 2 === 0 ? Star.radius : Star.radius2), i * (Math.PI * 2 / 10)));
+    }
+    return _results;
+  })();
 
   Branch = (function(_super) {
     __extends(Branch, _super);
@@ -795,6 +809,7 @@
       this.status.isGrowing = false;
       this.status.isDead = true;
       game.stars = _.without(game.stars, this.star);
+      game.novae.push(new Nova(new Vec(this.star.position), this.star.angle));
       delete this.star;
       if (game.stars.length === 0) {
         return game.showGameOver();
@@ -845,7 +860,7 @@
     };
 
     Branch.prototype.render = function() {
-      var branch, i, _i, _j, _len, _ref, _ref1, _results;
+      var branch, _i, _j, _len, _ref, _ref1, _results;
       game.ctx.save();
       game.ctx.beginPath();
       game.ctx.translate(-Config.branchWidth * 3 / 4, 0);
@@ -881,10 +896,52 @@
 
   })(Thing);
 
+  Nova = (function(_super) {
+    __extends(Nova, _super);
+
+    function Nova(position, angle) {
+      this.position = position;
+      this.angle = angle;
+      this.scale = 1.0;
+      this.time = 0;
+    }
+
+    Nova.prototype.update = function(speedMod) {
+      if (speedMod == null) {
+        speedMod = 1;
+      }
+      this.scale += 10 * speedMod;
+      this.time += 1 / game.config.fps * speedMod;
+      if (this.time > Config.starNovaTime) {
+        return this.die();
+      }
+    };
+
+    Nova.prototype.die = function() {
+      return game.novae = _.without(game.novae, this);
+    };
+
+    Nova.prototype.render = function() {
+      var _this = this;
+      return this.withTransform(function() {
+        game.ctx.beginPath();
+        game.ctx.lineWidth = 2;
+        GFX.drawLineString(Star.vertices);
+        game.ctx.strokeStyle = game.tailColor(10);
+        return game.ctx.stroke();
+      });
+    };
+
+    return Nova;
+
+  })(Thing);
+
   Starstalk = (function() {
     Starstalk.prototype.things = [];
 
     Starstalk.prototype.clouds = [];
+
+    Starstalk.prototype.novae = [];
 
     Starstalk.prototype.loopInterval = null;
 
@@ -976,11 +1033,17 @@
     Starstalk.prototype.doLoop = function() {
       var _this = this;
       return this.loopInterval = setInterval(function() {
-        var b, cloud, color, font, g, height, line, lines, obstacle, r, star, text, thing, things, width, x, y, _i, _j, _k, _l, _len, _len1, _len2, _len3, _len4, _m, _ref, _ref1, _ref2, _ref3;
+        var b, cloud, color, font, g, height, line, lines, nova, obstacle, r, star, text, thing, things, width, x, y, _i, _j, _k, _l, _len, _len1, _len2, _len3, _len4, _len5, _len6, _m, _n, _o, _ref, _ref1, _ref2, _ref3, _ref4, _ref5;
         if (_this.status.gameOver) {
           _ref = tinycolor(_this.tailColor()).toRgb(), r = _ref.r, g = _ref.g, b = _ref.b;
-          _this.view.fillScreen("rgba(" + r + "," + g + "," + b + ",0.1)");
-          _this.ctx.lineWidth = 2;
+          _this.view.fillScreen("rgba(" + r + "," + g + "," + b + ",0.5)");
+          _ref1 = game.novae;
+          for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
+            nova = _ref1[_i];
+            nova.update(0.25);
+            nova.render();
+          }
+          _this.ctx.lineWidth = 1.5;
           _this.ctx.fillStyle = '#222';
           _this.ctx.strokeStyle = '#222';
           _this.ctx.save();
@@ -988,22 +1051,22 @@
           lines = [
             {
               text: "YOU ASCENDED",
-              font: "60px Arial",
-              height: 60
+              font: "70px " + Config.mainFont,
+              height: 70
             }, {
               text: "" + (parseInt(_this.status.heightAchieved)) + " meters",
-              font: "80px Arial",
-              height: 80
+              font: "100px " + Config.mainFont,
+              height: 100
             }, {
               text: "click to begin anew",
-              font: "60px Arial",
-              height: 80,
+              font: "80px " + Config.mainFont,
+              height: 100,
               color: 'white'
             }
           ];
           y = 100;
-          for (_i = 0, _len = lines.length; _i < _len; _i++) {
-            line = lines[_i];
+          for (_j = 0, _len1 = lines.length; _j < _len1; _j++) {
+            line = lines[_j];
             text = line.text, font = line.font, height = line.height, color = line.color;
             if (color != null) {
               _this.ctx.strokeStyle = color;
@@ -1013,7 +1076,6 @@
             width = _this.ctx.measureText(text).width;
             x = _this.canvas.width / 2 - width / 2;
             y += height * 1.5;
-            _this.ctx.fillText(text, x, y);
             _this.ctx.strokeText(text, x, y);
           }
           _this.ctx.restore();
@@ -1025,24 +1087,29 @@
           _this.handleObstacles();
           _this.applyInput();
           things = [_this.stalk];
-          _ref1 = _this.stars;
-          for (_j = 0, _len1 = _ref1.length; _j < _len1; _j++) {
-            star = _ref1[_j];
+          _ref2 = _this.stars;
+          for (_k = 0, _len2 = _ref2.length; _k < _len2; _k++) {
+            star = _ref2[_k];
             things.push(star);
           }
-          _ref2 = _this.clouds;
-          for (_k = 0, _len2 = _ref2.length; _k < _len2; _k++) {
-            cloud = _ref2[_k];
+          _ref3 = _this.clouds;
+          for (_l = 0, _len3 = _ref3.length; _l < _len3; _l++) {
+            cloud = _ref3[_l];
             things.push(cloud);
           }
-          _ref3 = _this.obstacles;
-          for (_l = 0, _len3 = _ref3.length; _l < _len3; _l++) {
-            obstacle = _ref3[_l];
+          _ref4 = _this.novae;
+          for (_m = 0, _len4 = _ref4.length; _m < _len4; _m++) {
+            nova = _ref4[_m];
+            things.push(nova);
+          }
+          _ref5 = _this.obstacles;
+          for (_n = 0, _len5 = _ref5.length; _n < _len5; _n++) {
+            obstacle = _ref5[_n];
             things.push(obstacle);
           }
           if (!_this.status.paused) {
-            for (_m = 0, _len4 = things.length; _m < _len4; _m++) {
-              thing = things[_m];
+            for (_o = 0, _len6 = things.length; _o < _len6; _o++) {
+              thing = things[_o];
               thing.update();
               thing.render();
             }
@@ -1057,14 +1124,13 @@
 
     Starstalk.prototype.render = function() {
       var box, _i, _len, _ref, _results;
-      this.ctx.font = "60px Arial";
+      this.ctx.font = "60px " + Config.hudFont;
       this.ctx.strokeStyle = '#333';
       this.ctx.fillStyle = '#eee';
-      this.ctx.lineWidth = 2;
+      this.ctx.lineWidth = 1.5;
       this.ctx.save();
       this.ctx.setTransform(1, 0, 0, 1, 0, 0);
       this.ctx.fillText(parseInt(this.status.heightAchieved) + 'm', 50, 100);
-      this.ctx.strokeText(parseInt(this.status.heightAchieved) + 'm', 50, 100);
       this.ctx.restore();
       if (Config.debugDraw) {
         _ref = quadtree.getObjects();
@@ -1146,10 +1212,8 @@
         pos = new Vec(star.position);
         dist = pos.sub(this.status.highestStar.position).length();
         if (dist > this.maxAbsoluteDistanceBeforeDeath()) {
-          console.log('death by distance', dist);
           _results.push(star.branch.doStop());
         } else if (star.position.x < bounds.left - Config.autokillOffscreenX || star.position.x > bounds.left + bounds.width + Config.autokillOffscreenX) {
-          console.log('death by X');
           _results.push(star.branch.doStop());
         } else {
           _results.push(void 0);
@@ -1163,7 +1227,7 @@
     };
 
     Starstalk.prototype.handleObstacles = function() {
-      var cloud, height, i, obstacle, pos, position, velocity, _i, _j, _len, _len1, _ref, _ref1, _results;
+      var cloud, height, obstacle, pos, position, velocity, _i, _j, _len, _len1, _ref, _ref1, _results;
       height = this.status.heightAchieved;
       pos = this.status.highestStar.position;
       position = new Vec(pos);
@@ -1207,9 +1271,13 @@
       _ref = this.view.dimensions(), w = _ref[0], h = _ref[1];
       stars = this.stalk.collectStars();
       this.stars = stars;
-      highestStar = _.min(stars, function(s) {
-        return s.position.y;
-      });
+      if (stars.length === 1) {
+        highestStar = stars[0];
+      } else {
+        highestStar = _.min(stars, function(s) {
+          return s.position.y;
+        });
+      }
       newHeight = -highestStar.position.y;
       if (newHeight > this.status.heightAchieved) {
         this.status.heightAchieved = newHeight;
@@ -1234,8 +1302,11 @@
       }
     };
 
-    Starstalk.prototype.tailColor = function() {
-      return this.rainbowColors[this.status.tailColorIndex];
+    Starstalk.prototype.tailColor = function(factor) {
+      if (factor == null) {
+        factor = 1;
+      }
+      return this.rainbowColors[(this.status.tailColorIndex * factor) % this.rainbowColors.length];
     };
 
     Starstalk.prototype.bindEvents = function() {
@@ -1258,8 +1329,8 @@
         }
       });
       $(this.canvas).on('mousemove', function(e) {
-        _this.mouse.x = e.offsetX;
-        return _this.mouse.y = e.offsetY;
+        _this.mouse.x = e.offsetX || e.layerX;
+        return _this.mouse.y = e.offsetY || e.layerY;
       });
       $(this.canvas).on('mousedown', function(e) {
         var branch, _i, _len, _ref, _results;
@@ -1307,7 +1378,7 @@
     Starstalk.prototype.startTasks = function() {};
 
     Starstalk.prototype.pruneTree = function() {
-      var cloud, height, i, left, obj, r, rejected, rejectedStars, top, width, _i, _j, _len, _len1, _ref, _ref1;
+      var cloud, height, left, obj, r, rejected, rejectedStars, top, width, _i, _j, _len, _len1, _ref, _ref1;
       _ref = game.view.worldBounds(), left = _ref.left, top = _ref.top, width = _ref.width, height = _ref.height;
       rejected = quadtree.prune(left, top, width, height);
       for (_i = 0, _len = rejected.length; _i < _len; _i++) {
