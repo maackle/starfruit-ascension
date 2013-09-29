@@ -1,6 +1,13 @@
 
 lerp = (a,b,t) -> a*(1-t) + b*t
 
+clampAngleSigned = (a) ->
+	while a <= Math.PI
+		a += 2*Math.PI
+	while a >= Math.PI
+		a -= 2*Math.PI
+	a
+
 # Ensures that image is loaded before running fn()
 withImage = (im, fn) ->
 	if im.complete

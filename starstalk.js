@@ -1,5 +1,5 @@
 (function() {
-  var Balloon, Branch, Cloud, Collidable, Config, GFX, GraphicsHelper, Meteor, NotImplemented, Obstacle, Pegasus, Positional, Satellite, Sprite, Star, Starstalk, Thing, Vec, Viewport, game, lerp, makeImage, quadtree, withImage, withImages, world, _ref, _ref1, _ref2, _ref3, _ref4, _ref5,
+  var Balloon, Branch, Cloud, Collidable, Config, GFX, GraphicsHelper, Meteor, NotImplemented, Obstacle, Pegasus, Positional, Satellite, Sprite, Star, Starstalk, Thing, Vec, Viewport, atmoscale, clampAngleSigned, game, lerp, makeImage, quadtree, withImage, withImages, world, _ref, _ref1, _ref2, _ref3, _ref4, _ref5,
     __slice = [].slice,
     __hasProp = {}.hasOwnProperty,
     __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; },
@@ -7,6 +7,16 @@
 
   lerp = function(a, b, t) {
     return a * (1 - t) + b * t;
+  };
+
+  clampAngleSigned = function(a) {
+    while (a <= Math.PI) {
+      a += 2 * Math.PI;
+    }
+    while (a >= Math.PI) {
+      a -= 2 * Math.PI;
+    }
+    return a;
   };
 
   withImage = function(im, fn) {
@@ -67,29 +77,31 @@
     return im;
   };
 
+  atmoscale = 1 / 3;
+
   Config = {
-    growthRate: 3,
+    growthRate: 10,
+    starThrustRate: 20,
     branchAngle: Math.PI / 3,
     branchAngleUpwardWeight: 0.1,
-    branchDistance: 600,
+    branchDistance: 2000,
     branchFibers: 3,
     branchWidth: 10,
-    knotDistance: 50,
-    knotDistanceWhileThrusting: 20,
-    knotAngleJitter: Math.PI / 6,
+    knotDistance: 100,
+    knotDistanceWhileThrusting: 50,
+    knotAngleJitter: Math.PI / 48,
     cloudProbability: 0.5,
-    starSafetyDistance: 32,
+    starSafetyDistance: 128,
     starNovaRadius: 32,
-    starThrustRate: 6,
+    starNovaTime: 1,
     starImage: makeImage('img/star-32.png'),
+    cloudImage: makeImage('img/cloud-4-a.png'),
     starOffset: {
       x: 16,
       y: 16
     },
-    cloudImage: makeImage('img/cloud-4-a.png'),
-    cloudOffset: {
-      x: 16,
-      y: 16
+    atmosphere: {
+      layers: [[atmoscale * 0, tinycolor('#b5e0e2')], [atmoscale * 5000, tinycolor('#b5e0e2')], [atmoscale * 12000, tinycolor('#97b2c6')], [atmoscale * 50000, tinycolor('#778b9b')], [atmoscale * 80000, tinycolor('#37475b')], [atmoscale * 100000, tinycolor('#0f1419')]]
     }
   };
 
@@ -133,7 +145,7 @@
     };
 
     Vec.prototype.angle = function() {
-      return Math.atan2(this.y, this.x);
+      return clampAngleSigned(Math.atan2(this.y, this.x));
     };
 
     return Vec;
@@ -146,8 +158,8 @@
       this.offset = offset;
       if (this.offset == null) {
         this.offset = {
-          x: 0,
-          y: 0
+          x: this.im.width / 2,
+          y: this.im.height / 2
         };
       }
     }
@@ -230,7 +242,7 @@
       this.offset = [w / 2, h / 2];
     }
 
-    Viewport.prototype._setTransform = function() {
+    Viewport.prototype.resetTransform = function() {
       var h, ox, oy, w, _ref, _ref1;
       _ref = [this.canvas.width, this.canvas.height], w = _ref[0], h = _ref[1];
       this.offset = [w / 2, h / 2];
@@ -292,7 +304,7 @@
     };
 
     Viewport.prototype.update = function() {
-      return this._setTransform();
+      return this.resetTransform();
     };
 
     return Viewport;
@@ -305,7 +317,7 @@
 
   GFX = null;
 
-  quadtree = Quadtree.create();
+  quadtree = Quadtree.create(1000, 100000);
 
   quadtree.reset();
 
@@ -326,19 +338,9 @@
   Collidable = (function(_super) {
     __extends(Collidable, _super);
 
-    Collidable.prototype.offset = {
-      x: 0,
-      y: 0
-    };
-
-    Collidable.prototype.dimensions = [0, 0];
-
-    Collidable.prototype.aabb = null;
-
     function Collidable() {
-      var h, ox, oy, w, _ref1, _ref2;
+      var h, w, _ref1;
       _ref1 = this.dimensions, w = _ref1[0], h = _ref1[1];
-      _ref2 = this.offset, ox = _ref2[0], oy = _ref2[1];
       this.box = {
         left: this.position.x - this.offset.x,
         top: this.position.y - this.offset.y,
@@ -346,12 +348,14 @@
         height: h,
         object: this
       };
-      quadtree.insert(this.box);
     }
 
     Collidable.prototype.update = function() {
       this.box.left = this.position.x - this.offset.x;
-      return this.box.top = this.position.y - this.offset.y;
+      this.box.top = this.position.y - this.offset.y;
+      if (this.isActiveCollider) {
+        return quadtree.insert(this.box);
+      }
     };
 
     return Collidable;
@@ -435,6 +439,8 @@
 
     Star.prototype.attraction = null;
 
+    Star.prototype.isActiveCollider = true;
+
     function Star(position, branch) {
       var i, inc;
       this.position = position;
@@ -472,9 +478,14 @@
       return Star.__super__.update.call(this);
     };
 
+    Star.prototype.isSafe = function() {
+      return this.branch.status.distanceTravelled < Config.starSafetyDistance;
+    };
+
     Star.prototype.setBranch = function(branch) {
       this.branch = branch;
-      return this.position = this.branch.tip;
+      this.position = this.branch.tip;
+      return this.branch.star = this;
     };
 
     Star.prototype.render = function() {
@@ -482,7 +493,11 @@
       return this.withTransform(function() {
         game.ctx.beginPath();
         GFX.drawLineString(_this.vertices);
-        game.ctx.fillStyle = 'white';
+        if (_this.isSafe()) {
+          game.ctx.fillStyle = 'black';
+        } else {
+          game.ctx.fillStyle = 'white';
+        }
         game.ctx.strokeStyle = game.tailColor();
         game.ctx.lineWidth = 2;
         game.ctx.fill();
@@ -525,6 +540,7 @@
         branchAngle: Config.branchAngle,
         branchDistance: Config.branchDistance,
         knotDistance: Config.knotDistance,
+        deadTime: 0,
         isGrowing: true,
         distanceTravelled: 0,
         distanceTravelledKnot: 0
@@ -585,19 +601,22 @@
       if (this.star) {
         this.star.box.left = -9999;
       }
+      game.pruneTree();
       return delete this.star;
     };
 
     Branch.prototype.handleInput = function(e) {};
 
     Branch.prototype.update = function() {
-      var branch, diff, growth, _i, _len, _ref6, _results;
+      var a, branch, da, diff, growth, _i, _len, _ref6, _results;
       if (this.status.isGrowing) {
         if (this.star.attraction != null) {
           this.status.knotDistance = Config.knotDistanceWhileThrusting;
           diff = new Vec(this.star.attraction);
           diff.sub(this.star.position);
-          this.angle = lerp(this.angle, diff.angle(), 0.1);
+          a = clampAngleSigned(this.angle);
+          da = clampAngleSigned(diff.angle() - a);
+          this.angle = lerp(0, da, 0.1) + a;
           this.status.rate = Config.starThrustRate;
         } else {
           this.status.knotDistance = Config.knotDistance;
@@ -665,9 +684,14 @@
   Cloud = (function(_super) {
     __extends(Cloud, _super);
 
+    Cloud.prototype.isActiveCollider = false;
+
     Cloud.prototype.dimensions = [128, 96];
 
-    Cloud.prototype.offset = Config.cloudOffset;
+    Cloud.prototype.offset = {
+      x: 128 / 2,
+      y: 96 / 2
+    };
 
     function Cloud(position, velocity) {
       this.position = position;
@@ -715,6 +739,7 @@
       this.canvas = this.$canvas.get(0);
       this.ctx = this.canvas.getContext('2d');
       this.ctx.webkitImageSmoothingEnabled = this.ctx.imageSmoothingEnabled = this.ctx.mozImageSmoothingEnabled = this.ctx.oImageSmoothingEnabled = false;
+      this.ctx.setTransform(1, 0, 0, 1, 0, 0);
       this.GFX = new GraphicsHelper(this.ctx);
       numRainbowColors = 256;
       this.rainbowColors = (function() {
@@ -732,7 +757,7 @@
       };
       this.sprites = {
         star: new Sprite(Config.starImage, Config.starOffset),
-        cloud: new Sprite(Config.cloudImage, Config.cloudOffset)
+        cloud: new Sprite(Config.cloudImage)
       };
       this.view = new Viewport(this.canvas, {
         scroll: new Vec(0, 0),
@@ -750,6 +775,31 @@
       return this.canvas.height;
     };
 
+    Starstalk.prototype.skyColor = function(height) {
+      var colorHi, colorLo, heightHi, heightLo, hi, layer, layerHi, layerLo, layers, lo, out, t, _i, _len;
+      layers = Config.atmosphere.layers;
+      layerLo = layers[0];
+      for (_i = 0, _len = layers.length; _i < _len; _i++) {
+        layer = layers[_i];
+        layerHi = layer;
+        if (layerHi[0] > height) {
+          break;
+        }
+        layerLo = layer;
+      }
+      heightLo = layerLo[0], colorLo = layerLo[1];
+      heightHi = layerHi[0], colorHi = layerHi[1];
+      t = (height - heightLo) / (heightHi - heightLo);
+      lo = colorLo.toRgb();
+      hi = colorHi.toRgb();
+      out = tinycolor({
+        r: lerp(lo.r, hi.r, t),
+        g: lerp(lo.g, hi.g, t),
+        b: lerp(lo.b, hi.b, t)
+      }).toRgbString();
+      return out;
+    };
+
     Starstalk.prototype.start = function() {
       this.bindEvents();
       this.startTasks();
@@ -762,8 +812,10 @@
       var _this = this;
       return this.loopInterval = setInterval(function() {
         var cloud, star, thing, things, _i, _j, _k, _len, _len1, _len2, _ref6, _ref7;
-        _this.view.clearScreen('#b5e0e2');
+        _this.view.clearScreen(_this.skyColor(_this.status.heightAchieved));
+        quadtree.reset();
         _this.update();
+        _this.applyInput();
         things = [_this.stalk];
         _ref6 = _this.stars;
         for (_i = 0, _len = _ref6.length; _i < _len; _i++) {
@@ -782,6 +834,7 @@
             thing.render();
           }
         }
+        _this.handleCollision();
         _this.status.tailColorIndex += 1;
         _this.status.tailColorIndex %= _this.rainbowColors.length;
         return _this.render();
@@ -789,16 +842,92 @@
     };
 
     Starstalk.prototype.render = function() {
+      var box, _i, _len, _ref6, _results;
       this.ctx.font = "60px Arial";
       this.ctx.strokeStyle = '#333';
       this.ctx.save();
       this.ctx.setTransform(1, 0, 0, 1, 0, 0);
       this.ctx.strokeText(parseInt(this.status.heightAchieved) + 'm', 50, 100);
-      return this.ctx.restore();
+      this.ctx.restore();
+      _ref6 = quadtree.getObjects();
+      _results = [];
+      for (_i = 0, _len = _ref6.length; _i < _len; _i++) {
+        box = _ref6[_i];
+        this.ctx.beginPath();
+        this.ctx.rect(box.left, box.top, box.width, box.height);
+        this.ctx.strokeStyle = 'red';
+        _results.push(this.ctx.stroke());
+      }
+      return _results;
+    };
+
+    Starstalk.prototype.applyInput = function() {
+      var star, _i, _len, _ref6, _results;
+      _ref6 = this.stars;
+      _results = [];
+      for (_i = 0, _len = _ref6.length; _i < _len; _i++) {
+        star = _ref6[_i];
+        if (game.mouseDown) {
+          _results.push(star.setAttraction(game.view.screen2world(game.mouse)));
+        } else {
+          _results.push(star.setAttraction(null));
+        }
+      }
+      return _results;
+    };
+
+    Starstalk.prototype.handleCollision = function() {
+      var allDeadStars, collidable, deadStars, hit, hits, obj, safeStarIDs, star, _i, _j, _k, _l, _len, _len1, _len2, _len3, _len4, _m, _ref6, _ref7, _results,
+        _this = this;
+      collidable = [];
+      _ref6 = this.stars;
+      for (_i = 0, _len = _ref6.length; _i < _len; _i++) {
+        star = _ref6[_i];
+        collidable.push(star);
+      }
+      allDeadStars = [];
+      safeStarIDs = [];
+      for (_j = 0, _len1 = collidable.length; _j < _len1; _j++) {
+        obj = collidable[_j];
+        hits = _.uniq(quadtree.getObjects(obj.box.left, obj.box.top, obj.box.width, obj.box.height), function(hit) {
+          return hit.object.constructor.name + hit.object.id;
+        });
+        if (hits.length > 1) {
+          deadStars = [];
+          for (_k = 0, _len2 = hits.length; _k < _len2; _k++) {
+            hit = hits[_k];
+            if (hit.object instanceof Star) {
+              deadStars.push(hit.object);
+            }
+          }
+          if (__indexOf.call(allDeadStars, star) < 0) {
+            for (_l = 0, _len3 = deadStars.length; _l < _len3; _l++) {
+              star = deadStars[_l];
+              allDeadStars.push(star);
+            }
+          }
+        }
+      }
+      if (allDeadStars.length > 0) {
+        console.log('dead', allDeadStars.map(function(s) {
+          return s.id;
+        }));
+        console.log('saved', safeStarIDs);
+      }
+      _results = [];
+      for (_m = 0, _len4 = allDeadStars.length; _m < _len4; _m++) {
+        star = allDeadStars[_m];
+        if (!(!(_ref7 = star.id, __indexOf.call(safeStarIDs, _ref7) >= 0) && !star.isSafe())) {
+          continue;
+        }
+        console.log('DEATH', star);
+        _results.push(star.branch.doStop());
+      }
+      return _results;
     };
 
     Starstalk.prototype.update = function() {
-      var a, b, cloud, clouds, collidable, deadStars, h, highestStar, hit, hits, i, newScrollY, obj, safeStars, star, stars, w, _i, _j, _k, _l, _len, _len1, _len2, _len3, _len4, _m, _ref6, _ref7, _ref8, _results;
+      var cloud, h, highestStar, i, newScrollY, stars, w, _i, _len, _ref6, _ref7, _results;
       _ref6 = this.view.dimensions(), w = _ref6[0], h = _ref6[1];
       stars = this.stalk.collectStars();
       this.stars = stars;
@@ -815,78 +944,11 @@
         this.clouds.push(Cloud.make(highestStar.position));
       }
       _ref7 = this.clouds;
+      _results = [];
       for (cloud = _i = 0, _len = _ref7.length; _i < _len; cloud = ++_i) {
         i = _ref7[cloud];
         if (cloud.x > this.width()) {
-          this.clouds.splice(i, 1);
-        }
-      }
-      for (_j = 0, _len1 = stars.length; _j < _len1; _j++) {
-        star = stars[_j];
-        if (game.mouseDown) {
-          star.setAttraction(game.view.screen2world(game.mouse));
-        } else {
-          star.setAttraction(null);
-        }
-      }
-      collidable = [];
-      for (_k = 0, _len2 = stars.length; _k < _len2; _k++) {
-        star = stars[_k];
-        collidable.push(star);
-      }
-      _ref8 = this.clouds;
-      for (_l = 0, _len3 = _ref8.length; _l < _len3; _l++) {
-        cloud = _ref8[_l];
-        collidable.push(cloud);
-      }
-      _results = [];
-      for (_m = 0, _len4 = collidable.length; _m < _len4; _m++) {
-        obj = collidable[_m];
-        hits = quadtree.getObjects(obj.box.left, obj.box.top, obj.box.width, obj.box.height);
-        if (hits.length > 1) {
-          deadStars = (function() {
-            var _len5, _n, _results1;
-            _results1 = [];
-            for (_n = 0, _len5 = hits.length; _n < _len5; _n++) {
-              hit = hits[_n];
-              if (hit.object instanceof Star) {
-                _results1.push(hit.object);
-              }
-            }
-            return _results1;
-          })();
-          safeStars = [];
-          clouds = (function() {
-            var _len5, _n, _results1;
-            _results1 = [];
-            for (_n = 0, _len5 = hits.length; _n < _len5; _n++) {
-              hit = hits[_n];
-              if (hit.object instanceof Cloud) {
-                _results1.push(hit.object);
-              }
-            }
-            return _results1;
-          })();
-          if (deadStars.length === 2) {
-            a = deadStars[0], b = deadStars[1];
-            if (a.id === b.id) {
-              console.warn('weird case', deadStars);
-              safeStars = [a, b];
-            } else if (a.branch.parent.id === b.branch.parent.id && a.branch.status.distanceTravelled < Config.starSafetyDistance) {
-              safeStars = [a, b];
-            }
-          }
-          _results.push((function() {
-            var _len5, _n, _results1;
-            _results1 = [];
-            for (_n = 0, _len5 = deadStars.length; _n < _len5; _n++) {
-              star = deadStars[_n];
-              if (!(__indexOf.call(safeStars, star) >= 0)) {
-                _results1.push(star.branch.doStop());
-              }
-            }
-            return _results1;
-          })());
+          _results.push(this.clouds.splice(i, 1));
         } else {
           _results.push(void 0);
         }
@@ -912,11 +974,10 @@
       $(window).on('resize', function(e) {
         var $body;
         $body = $('body');
-        _this.$canvas.attr({
+        return _this.$canvas.attr({
           width: $body.width(),
           height: $body.height()
         });
-        return _this.view.clearScreen('pink');
       });
       $(document).on('keypress', function(e) {
         switch (e.charCode) {
@@ -948,30 +1009,36 @@
     Starstalk.prototype.startTasks = function() {
       var _this = this;
       return setInterval(function() {
-        var cloud, height, i, left, obj, r, rejected, top, width, _i, _j, _len, _len1, _ref6, _ref7;
-        _ref6 = game.view.worldBounds(), left = _ref6.left, top = _ref6.top, width = _ref6.width, height = _ref6.height;
-        console.log(game.view.worldBounds());
-        rejected = quadtree.prune(left, top, width, height);
-        for (_i = 0, _len = rejected.length; _i < _len; _i++) {
-          r = rejected[_i];
-          obj = r.object;
-          if (obj instanceof Star) {
-            obj.branch.doStop();
-          } else if (obj instanceof Cloud) {
-            _ref7 = game.clouds;
-            for (cloud = _j = 0, _len1 = _ref7.length; _j < _len1; cloud = ++_j) {
-              i = _ref7[cloud];
-              if (obj === cloud) {
-                game.clouds.splice(i, 1);
-                console.log('killed cloud');
-              }
+        return _this.pruneTree();
+      }, 10000);
+    };
+
+    Starstalk.prototype.pruneTree = function() {
+      var cloud, height, i, left, obj, r, rejected, rejectedStars, top, width, _i, _j, _len, _len1, _ref6, _ref7;
+      _ref6 = game.view.worldBounds(), left = _ref6.left, top = _ref6.top, width = _ref6.width, height = _ref6.height;
+      rejected = quadtree.prune(left, top, width, height);
+      for (_i = 0, _len = rejected.length; _i < _len; _i++) {
+        r = rejected[_i];
+        obj = r.object;
+        if (obj instanceof Star) {
+          obj.branch.doStop();
+        } else if (obj instanceof Cloud) {
+          _ref7 = game.clouds;
+          for (cloud = _j = 0, _len1 = _ref7.length; _j < _len1; cloud = ++_j) {
+            i = _ref7[cloud];
+            if (obj === cloud) {
+              game.clouds.splice(i, 1);
+              console.log('killed cloud');
             }
           }
         }
-        if (rejected.length > 0) {
-          return console.log('REJECTS', rejected);
-        }
-      }, 3000);
+      }
+      rejectedStars = rejected.filter(function(r) {
+        return r instanceof Star;
+      });
+      if (rejected.length > 0) {
+        return console.log('REJECTS', rejected);
+      }
     };
 
     return Starstalk;

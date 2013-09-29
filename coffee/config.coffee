@@ -1,26 +1,38 @@
+atmoscale = 1/3
 
 Config = 
-	growthRate: 3
+	growthRate: 10
+	starThrustRate: 20
+
 	branchAngle: Math.PI / 3
 	branchAngleUpwardWeight: 0.1
-	branchDistance: 600
+	branchDistance: 2000
 	branchFibers: 3
 	branchWidth: 10
-	knotDistance: 50
-	knotDistanceWhileThrusting: 20
-	knotAngleJitter: Math.PI / 6
+
+	knotDistance: 100
+	knotDistanceWhileThrusting: 50
+	knotAngleJitter: Math.PI / 48
 
 	cloudProbability: 0.5
 
-	starSafetyDistance: 32
+	starSafetyDistance: 128
 	starNovaRadius: 32
-	starThrustRate: 6
+	starNovaTime: 1
 
 	starImage: makeImage 'img/star-32.png'
+	cloudImage: makeImage 'img/cloud-4-a.png'
+
 	starOffset:
 		x: 16
 		y: 16
-	cloudImage: makeImage 'img/cloud-4-a.png'
-	cloudOffset:
-		x: 16
-		y: 16
+
+	atmosphere:
+		layers: [
+			[atmoscale*0,		tinycolor '#b5e0e2'],
+			[atmoscale*5000, 	tinycolor '#b5e0e2'],
+			[atmoscale*12000,	tinycolor '#97b2c6'],	# tropopause
+			[atmoscale*50000, 	tinycolor '#778b9b'],	# stratopause
+			[atmoscale*80000, 	tinycolor '#37475b'],	# mesopause
+			[atmoscale*100000,	tinycolor '#0f1419'],	# spaaaace
+		]

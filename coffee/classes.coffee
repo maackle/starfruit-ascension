@@ -33,15 +33,15 @@ class Vec
 		Math.sqrt @lengthSquared()
 
 	angle: ->
-		return Math.atan2 @y, @x
+		return clampAngleSigned Math.atan2 @y, @x
 
 class Sprite
 
 	constructor: (@im, @offset) ->
 		if not @offset?
 			@offset = 
-				x: 0
-				y: 0
+				x: @im.width / 2
+				y: @im.height / 2
 
 	draw: (pos) ->
 		withImage @im, (im) =>
@@ -82,7 +82,7 @@ class Viewport
 		[w, h] = [@canvas.width, @canvas.height]
 		@offset = [w/2, h/2]
 	
-	_setTransform: ->
+	resetTransform: ->
 		[w, h] = [@canvas.width, @canvas.height]
 		@offset = [w/2, h/2]
 		if @anchor.top?
@@ -123,7 +123,7 @@ class Viewport
 		[w, h] = [@canvas.width, @canvas.height]
 
 	update: ->
-		@_setTransform()
+		@resetTransform()
 
 
 
