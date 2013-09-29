@@ -4,12 +4,10 @@ GFX = null
 quadtree = Quadtree.create(1000, 100000)
 quadtree.reset()
 
-class Positional extends Thing
+class Collidable extends Thing
 
 	position: null
-
-class Collidable extends Positional
-
+	
 	constructor: ->
 		[w, h] = @dimensions
 		@box = 
@@ -28,9 +26,52 @@ class Collidable extends Positional
 
 class Obstacle extends Collidable
 
+	isActiveCollider: true
+
+	constructor: (@position, @velocity) ->
+		super()
+
+	update: ->
+		@position.add @velocity
+		super()
+
 class Pegasus extends Obstacle
+
 class Satellite extends Obstacle
+	# dimensions: [120, 120]
+	dimensions: [80, 80]
+	offset: {x: 40, y: 40}
+
+	render: ->
+		game.sprites.satellite.draw @position
+
+
 class Balloon extends Obstacle
+	# dimensions: [90, 180]
+	dimensions: [70, 140]
+	offset: {x: 35, y: 90}
+
+	render: ->
+		game.sprites.balloon.draw @position
+
+class Cloud extends Collidable
+
+	isActiveCollider: false
+	dimensions: [128, 96]
+	offset: 
+		x: 128/2
+		y: 96/2
+
+	constructor: (@position, @velocity) ->
+		super()
+
+	update: ->
+		@position.add @velocity
+		super()
+
+	render: ->
+		game.sprites.cloud.draw @position
+
 class Meteor extends Obstacle
 
 class Star extends Collidable
@@ -47,7 +88,6 @@ class Star extends Collidable
 
 	constructor: (@position, @branch) ->
 		super()
-		console.log 'new star @', @branch
 		@hasFocus = false
 		@angle = 0
 		inc = Math.PI * 2 / 10
@@ -72,12 +112,12 @@ class Star extends Collidable
 		@branch.status.distanceTravelled < Config.starSafetyDistance
 
 	setBranch: (branch) ->
+		@branch.star = null
 		@branch = branch
 		@position = @branch.tip
 		@branch.star = this
 
 	render: ->
-		# game.sprites.star.draw @position
 		@withTransform =>
 			game.ctx.beginPath()
 			GFX.drawLineString @vertices
@@ -94,6 +134,8 @@ class Star extends Collidable
 class Branch extends Thing
 
 	@all: []
+	@growing: ->
+		@all.filter (b) => b.status.isGrowing
 
 	id: null
 	tip: null
@@ -114,7 +156,7 @@ class Branch extends Thing
 		@status =
 			rate: Config.growthRate
 			branchAngle: Config.branchAngle
-			branchDistance: Config.branchDistance
+			branchDistance: Config.branchDistanceMax
 			knotDistance: Config.knotDistance
 			deadTime: 0
 			isGrowing: true
@@ -144,7 +186,7 @@ class Branch extends Thing
 			keepStar: true
 		@branches = [left, right]
 		@status.isGrowing = false
-		@star = null
+		@status.markForNoGrow = true
 
 	doKnot: ->
 		@knots.push (new Vec @tip)
@@ -153,9 +195,10 @@ class Branch extends Thing
 	doStop: ->
 		@status.isGrowing = false
 		@status.isDead = true
-		@star.box.left = -9999 if @star  # mark it for pruning
-		game.pruneTree()
+		game.stars = _.without game.stars, @star
 		delete @star
+		if game.stars.length == 0
+			game.showGameOver()
 
 	handleInput: (e) ->
 
@@ -178,11 +221,15 @@ class Branch extends Thing
 			@tip.add growth
 			@star.angle = growth.angle()
 			
-			if @status.distanceTravelled > @status.branchDistance
+			if Config.autoFork and @status.distanceTravelled > @status.branchDistance
 				@doFork()
 			else if @status.distanceTravelledKnot > @status.knotDistance
 				@doKnot()
 				@status.distanceTravelledKnot = 0
+
+			if @status.markForNoGrow
+				@status.markForNoGrow = false
+				@star = null
 		else
 			for branch in @branches
 				branch.update()
@@ -213,32 +260,6 @@ class Branch extends Thing
 			for branch in @branches
 				branch.render()
 
-class Cloud extends Collidable
-
-	isActiveCollider: false
-	dimensions: [128, 96]
-	offset: 
-		x: 128/2
-		y: 96/2
-
-	constructor: (@position, @velocity) ->
-		super()
-
-	update: ->
-		@position.add @velocity
-		super()
-
-	render: ->
-		game.sprites.cloud.draw @position
-
-	@make: (reference) ->
-		# referece is highestStar position or reference position
-		position = new Vec reference
-		position.y -= game.height()
-		position.x += Math.random() * game.width() - game.width()
-		velocity = new Vec Math.random() * 2, 0
-		new Cloud position, velocity
-
 
 class Starstalk
 
@@ -256,6 +277,7 @@ class Starstalk
 		@ctx.webkitImageSmoothingEnabled = @ctx.imageSmoothingEnabled = @ctx.mozImageSmoothingEnabled = @ctx.oImageSmoothingEnabled = false;
 		@ctx.setTransform 1, 0, 0, 1, 0, 0
 		@GFX = new GraphicsHelper @ctx
+		@obstacles = []
 		numRainbowColors = 256
 		@rainbowColors = (tinycolor("hsv(#{p * 100 / numRainbowColors}%, 50%, 100%)").toRgbString() for p in [0..numRainbowColors])
 		@status =
@@ -265,6 +287,8 @@ class Starstalk
 		@sprites = 
 			star: new Sprite Config.starImage, Config.starOffset
 			cloud: new Sprite Config.cloudImage
+			balloon: new Sprite Config.balloonImage
+			satellite: new Sprite Config.satelliteImage
 		@view = new Viewport @canvas,
 			scroll: new Vec 0, 0
 			anchor:
@@ -280,13 +304,14 @@ class Starstalk
 			layerHi = layer
 			if layerHi[0] > height then break
 			layerLo = layer
-		[heightLo, colorLo] = layerLo
-		[heightHi, colorHi] = layerHi
+		[heightLo, colorLo, alphaLo] = layerLo
+		[heightHi, colorHi, alphaHi] = layerHi
 		t = (height - heightLo) / (heightHi - heightLo)
 		lo = colorLo.toRgb()
 		hi = colorHi.toRgb()
-		out = tinycolor(r: lerp(lo.r, hi.r, t), g: lerp(lo.g, hi.g, t), b: lerp(lo.b, hi.b, t)).toRgbString()
-		out
+		alpha = lerp(alphaLo, alphaHi, t)
+		{r,g,b} = tinycolor(r: lerp(lo.r, hi.r, t), g: lerp(lo.g, hi.g, t), b: lerp(lo.b, hi.b, t)).toRgb()
+		"rgba(#{r}, #{g}, #{b}, #{alpha})"
 
 
 	start: ->
@@ -298,36 +323,70 @@ class Starstalk
 
 	doLoop: ->
 		@loopInterval = setInterval =>
-			@view.clearScreen(@skyColor(@status.heightAchieved))
-			quadtree.reset()
-			@update()
-			@applyInput()
-			things = [@stalk]
-			things.push star for star in @stars
-			things.push cloud for cloud in @clouds
-			if not @status.paused
-				for thing in things
-					thing.update()
-					thing.render()
-			@handleCollision()
+			if @status.gameOver
+				@view.clearScreen(@tailColor())
+				@ctx.strokeStyle = '#333'
+				@ctx.fillStyle = '#333'
+				@ctx.lineWidth = 2
+				@ctx.save()
+				@ctx.setTransform(1, 0, 0, 1, 0, 0)
+				lines = [
+					{ text: "YOU ASCENDED", font: "60px Arial", height: 60 }
+					{ text: "#{parseInt(@status.heightAchieved)} meters", font: "80px Arial", height: 80 }
+					{ text: "click to begin anew", font: "60px Arial", height: 80, color: 'white' }
+				]
+				y = 100
+				for line in lines
+					{text, font, height, color} = line
+					if color?
+						@ctx.strokeStyle = color
+						@ctx.fillStyle = color
+					@ctx.font = font
+					{width} = @ctx.measureText(text)
+					x = @canvas.width / 2 - width / 2
+					y += height * 1.5
+					@ctx.fillText(text, x, y)
+					@ctx.strokeText(text, x, y)
+
+				@ctx.restore()
+			else
+				color = @skyColor(@status.heightAchieved)
+				@view.clearScreen(color)
+				quadtree.reset()
+				@update()
+				@handleObstacles()
+				@applyInput()
+				things = [@stalk]
+				things.push star for star in @stars
+				things.push cloud for cloud in @clouds
+				things.push obstacle for obstacle in @obstacles
+				if not @status.paused
+					for thing in things
+						thing.update()
+						thing.render()
+				@handleCollision()
+				@render()
 			@status.tailColorIndex += 1
 			@status.tailColorIndex %= @rainbowColors.length
-			@render()
 		, parseInt(1000 / @config.fps)
 
 	render: ->
 		@ctx.font = "60px Arial"
 		@ctx.strokeStyle = '#333'
+		@ctx.fillStyle = '#eee'
+		@ctx.lineWidth = 2
 		@ctx.save()
 		@ctx.setTransform(1, 0, 0, 1, 0, 0)
+		@ctx.fillText(parseInt(@status.heightAchieved) + 'm', 50, 100)
 		@ctx.strokeText(parseInt(@status.heightAchieved) + 'm', 50, 100)
 		@ctx.restore()
 
-		for box in quadtree.getObjects()
-			@ctx.beginPath()
-			@ctx.rect(box.left, box.top, box.width, box.height)
-			@ctx.strokeStyle = 'red'
-			@ctx.stroke()
+		if Config.debugDraw
+			for box in quadtree.getObjects()
+				@ctx.beginPath()
+				@ctx.rect(box.left, box.top, box.width, box.height)
+				@ctx.strokeStyle = 'red'
+				@ctx.stroke()
 
 	applyInput: ->
 		for star in @stars
@@ -340,7 +399,7 @@ class Starstalk
 
 		collidable = []
 		collidable.push star for star in @stars
-		# collidable.push cloud for cloud in @clouds
+		collidable.push o for o in @obstacles
 		allDeadStars = []
 		safeStarIDs = []
 		for obj in collidable
@@ -349,38 +408,50 @@ class Starstalk
 			if hits.length > 1
 				deadStars = []
 				deadStars.push hit.object for hit in hits when hit.object instanceof Star
-				# clouds = (hit.object for hit in hits when hit.object instanceof Cloud)
-				# if deadStars.length == 2
-				# 	[a, b] = deadStars
-				# 	if a.branch.parent? and b.branch.parent? and (a.branch.parent.id == b.branch.parent.id) and a.isSafe() and b.isSafe()
-				# 		# console.log 'saaafety', safeStarIDs
-				# 		safeStarIDs.push a.id
-				# 		safeStarIDs.push b.id
 				allDeadStars.push star for star in deadStars if star not in allDeadStars
-
-		if allDeadStars.length > 0
-			console.log 'dead', allDeadStars.map (s) -> s.id
-			console.log 'saved', safeStarIDs
 		for star in allDeadStars when not (star.id in safeStarIDs) and not star.isSafe()
-			console.log 'DEATH', star
 			star.branch.doStop()
+
+	handleObstacles: ->
+		height = @status.heightAchieved
+		pos = @status.highestStar.position
+
+		position = new Vec pos
+		position.y -= game.height()
+		position.x += Math.random() * game.width() - game.width()*2/3
+		if Math.random() < Config.probability.cloud(height) / @config.fps
+			velocity = new Vec Math.random() * 3, 0
+			@clouds.push new Cloud position, velocity
+			console.log position
+		else if Math.random() < Config.probability.balloon(height) / @config.fps
+			velocity = new Vec Math.random() * 2, 0
+			@obstacles.push new Balloon position, velocity
+			console.log position
+		else if Math.random() < Config.probability.satellite(height) / @config.fps
+			velocity = new Vec Math.random() * 4, 0
+			@obstacles.push new Satellite position, velocity
+			console.log position
+
+		for i, cloud in @clouds
+			if cloud.x > @width()
+				@clouds.splice(i, 1)
+		for i, obstacle in @obstacles
+			if obstacle.x > @width()
+				@obstacles.splice(i, 1)
 
 	update: ->
 		[w, h] = @view.dimensions()
 		stars = @stalk.collectStars()
 		@stars = stars
 		highestStar = _.min stars, (s) -> s.position.y
-		@status.heightAchieved = -highestStar.position.y
+		newHeight = -highestStar.position.y
+		@status.heightAchieved = newHeight if newHeight > @status.heightAchieved
+		@status.highestStar = highestStar
 		newScrollY = -h/2 - highestStar.position.y
 		@view.scroll.y = Math.max 0, newScrollY if newScrollY > @view.scroll.y
 		@view.update()
-		if Math.random() < Config.cloudProbability / @config.fps
-			@clouds.push Cloud.make(highestStar.position)
-		for i, cloud in @clouds
-			if cloud.x > @width()
-				@clouds.splice(i, 1)
-
-
+		$('body').css
+			'background-position': "0 #{@status.heightAchieved / 10}px"
 
 	togglePause: ->
 		@status.paused = not @status.paused
@@ -403,10 +474,9 @@ class Starstalk
 			switch e.charCode
 				when 32
 					@togglePause()
-				when 115
-					@scroll.x -= 3
-				when 119
-					@scroll.x += 3
+				when 70 | 102
+					@canvas.webkitRequestFullScreen()
+					@canvas.mozRequestFullScreen()
 
 		$(@canvas).on 'mousemove', (e) =>
 			@mouse.x = e.offsetX
@@ -415,17 +485,37 @@ class Starstalk
 		$(@canvas).on 'mousedown', (e) =>
 			if e.which == 1
 				@mouseDown = true
+			else if e.which == 3
+				# @status.highestStar.branch.doFork()
+				# console.log Branch.growing()
+				for branch in Branch.growing()
+					# console.log branch
+					branch.doFork() if branch.status.distanceTravelled > Config.branchDistanceMin
+
 
 		$(@canvas).on 'mouseup', (e) =>
 			if e.which == 1
 				@mouseDown = false
 
+		$(@canvas).on 'contextmenu', (e) =>
+    		e.preventDefault()
+
 		$(document).on 'keydown', (e) =>
 
+	unbindEvents: ->
+		$(window).off 'resize'
+		$(document).off 'keypress keydown'
+		$(@canvas).off 'mousemove mousedown mouseup contextmenu'
+
+	showGameOver: ->
+		@status.gameOver = true
+		$(@canvas).on 'mousedown', (e) =>
+			newGame()
+
 	startTasks: ->
-		setInterval =>
-			@pruneTree()
-		, 10000
+		# setInterval =>
+		# 	@pruneTree()
+		# , 10000
 
 	pruneTree: ->
 		{left, top, width, height} = game.view.worldBounds()
@@ -442,11 +532,11 @@ class Starstalk
 						console.log 'killed cloud'
 
 		rejectedStars = rejected.filter (r) -> r instanceof Star
-		console.log 'REJECTS', rejected if rejected.length > 0
 
-
-$ ->
-	$body = $('body')
+newGame = ->
+	if game?
+		game.unbindEvents()
+		clearInterval game.loopInterval
 
 	game = new Starstalk 
 		$canvas: $('#game')
@@ -455,4 +545,8 @@ $ ->
 	world = game.world
 
 	game.start()
-	
+
+$ ->
+	$body = $('body')
+
+	newGame()

@@ -1,20 +1,40 @@
-atmoscale = 1/3
+atmoscale = 1
+Atmosphere = 
+	tropopause: 12000 * atmoscale
+	stratopause: 40000 * atmoscale
+	mesopause: 75000 * atmoscale
+	exopause: 100000 * atmoscale
 
 Config = 
-	growthRate: 10
-	starThrustRate: 20
+	growthRate: 15
+	starThrustRate: 18
+
+	autoFork: true
+	debugDraw: false
 
 	branchAngle: Math.PI / 3
 	branchAngleUpwardWeight: 0.1
-	branchDistance: 2000
+	branchDistanceMin: 1500
+	branchDistanceMax: 3000
 	branchFibers: 3
 	branchWidth: 10
 
 	knotDistance: 100
 	knotDistanceWhileThrusting: 50
-	knotAngleJitter: Math.PI / 48
+	knotAngleJitter: Math.PI / 24
 
-	cloudProbability: 0.5
+	probability:
+		cloud: (height) ->
+			if height < Atmosphere.tropopause then 0.5
+			else if height < Atmosphere.stratopause then 1.25
+			else if height < Atmosphere.mesopause then 0.33
+			else 0
+		balloon: (height) ->
+			if height < Atmosphere.stratopause then 0.55
+			else 0
+		satellite: (height) ->
+			if height > Atmosphere.stratopause then 0.75
+			else 0
 
 	starSafetyDistance: 128
 	starNovaRadius: 32
@@ -22,6 +42,8 @@ Config =
 
 	starImage: makeImage 'img/star-32.png'
 	cloudImage: makeImage 'img/cloud-4-a.png'
+	balloonImage: makeImage 'img/balloon.png'
+	satelliteImage: makeImage 'img/satellite.png'
 
 	starOffset:
 		x: 16
@@ -29,10 +51,10 @@ Config =
 
 	atmosphere:
 		layers: [
-			[atmoscale*0,		tinycolor '#b5e0e2'],
-			[atmoscale*5000, 	tinycolor '#b5e0e2'],
-			[atmoscale*12000,	tinycolor '#97b2c6'],	# tropopause
-			[atmoscale*50000, 	tinycolor '#778b9b'],	# stratopause
-			[atmoscale*80000, 	tinycolor '#37475b'],	# mesopause
-			[atmoscale*100000,	tinycolor '#0f1419'],	# spaaaace
+			[atmoscale*0,		(tinycolor '#b5e0e2'), 1],
+			[atmoscale*5000, 	(tinycolor '#b5e0e2'), 1],
+			[Atmosphere.tropopause,		(tinycolor '#97b2c6'), 0.95],	# tropopause
+			[Atmosphere.stratopause, 	(tinycolor '#778b9b'), 0.9],	# stratopause
+			[Atmosphere.mesopause, 		(tinycolor '#37475b'), 0.7],	# mesopause
+			[Atmosphere.exoopause,		(tinycolor '#0f1419'), 0.0],	# spaaaace
 		]

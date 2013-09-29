@@ -39,9 +39,10 @@ class Sprite
 
 	constructor: (@im, @offset) ->
 		if not @offset?
-			@offset = 
-				x: @im.width / 2
-				y: @im.height / 2
+			withImage @im, (im) =>
+				@offset = 
+					x: @im.width / 2
+					y: @im.height / 2
 
 	draw: (pos) ->
 		withImage @im, (im) =>
@@ -101,6 +102,7 @@ class Viewport
 		[ox, oy] = @offset
 		@ctx.setTransform(1, 0, 0, 1, 0, 0)
 		@ctx.fillStyle = color
+		@ctx.clearRect 0, 0, w, h
 		@ctx.fillRect 0, 0, w, h
 		@ctx.restore()
 	

@@ -1,5 +1,5 @@
 (function() {
-  var Balloon, Branch, Cloud, Collidable, Config, GFX, GraphicsHelper, Meteor, NotImplemented, Obstacle, Pegasus, Positional, Satellite, Sprite, Star, Starstalk, Thing, Vec, Viewport, atmoscale, clampAngleSigned, game, lerp, makeImage, quadtree, withImage, withImages, world, _ref, _ref1, _ref2, _ref3, _ref4, _ref5,
+  var Atmosphere, Balloon, Branch, Cloud, Collidable, Config, GFX, GraphicsHelper, Meteor, NotImplemented, Obstacle, Pegasus, Satellite, Sprite, Star, Starstalk, Thing, Vec, Viewport, atmoscale, clampAngleSigned, game, lerp, makeImage, newGame, quadtree, withImage, withImages, world, _ref, _ref1, _ref2, _ref3,
     __slice = [].slice,
     __hasProp = {}.hasOwnProperty,
     __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; },
@@ -77,31 +77,69 @@
     return im;
   };
 
-  atmoscale = 1 / 3;
+  atmoscale = 1;
+
+  Atmosphere = {
+    tropopause: 12000 * atmoscale,
+    stratopause: 40000 * atmoscale,
+    mesopause: 75000 * atmoscale,
+    exopause: 100000 * atmoscale
+  };
 
   Config = {
-    growthRate: 10,
-    starThrustRate: 20,
+    growthRate: 15,
+    starThrustRate: 18,
+    autoFork: true,
+    debugDraw: false,
     branchAngle: Math.PI / 3,
     branchAngleUpwardWeight: 0.1,
-    branchDistance: 2000,
+    branchDistanceMin: 1500,
+    branchDistanceMax: 3000,
     branchFibers: 3,
     branchWidth: 10,
     knotDistance: 100,
     knotDistanceWhileThrusting: 50,
-    knotAngleJitter: Math.PI / 48,
-    cloudProbability: 0.5,
+    knotAngleJitter: Math.PI / 24,
+    probability: {
+      cloud: function(height) {
+        if (height < Atmosphere.tropopause) {
+          return 0.5;
+        } else if (height < Atmosphere.stratopause) {
+          return 1.25;
+        } else if (height < Atmosphere.mesopause) {
+          return 0.33;
+        } else {
+          return 0;
+        }
+      },
+      balloon: function(height) {
+        if (height < Atmosphere.stratopause) {
+          return 0.55;
+        } else {
+          return 0;
+        }
+      },
+      satellite: function(height) {
+        if (height > Atmosphere.stratopause) {
+          return 0.75;
+        } else {
+          return 0;
+        }
+      }
+    },
     starSafetyDistance: 128,
     starNovaRadius: 32,
     starNovaTime: 1,
     starImage: makeImage('img/star-32.png'),
     cloudImage: makeImage('img/cloud-4-a.png'),
+    balloonImage: makeImage('img/balloon.png'),
+    satelliteImage: makeImage('img/satellite.png'),
     starOffset: {
       x: 16,
       y: 16
     },
     atmosphere: {
-      layers: [[atmoscale * 0, tinycolor('#b5e0e2')], [atmoscale * 5000, tinycolor('#b5e0e2')], [atmoscale * 12000, tinycolor('#97b2c6')], [atmoscale * 50000, tinycolor('#778b9b')], [atmoscale * 80000, tinycolor('#37475b')], [atmoscale * 100000, tinycolor('#0f1419')]]
+      layers: [[atmoscale * 0, tinycolor('#b5e0e2'), 1], [atmoscale * 5000, tinycolor('#b5e0e2'), 1], [Atmosphere.tropopause, tinycolor('#97b2c6'), 0.95], [Atmosphere.stratopause, tinycolor('#778b9b'), 0.9], [Atmosphere.mesopause, tinycolor('#37475b'), 0.7], [Atmosphere.exoopause, tinycolor('#0f1419'), 0.0]]
     }
   };
 
@@ -154,13 +192,16 @@
 
   Sprite = (function() {
     function Sprite(im, offset) {
+      var _this = this;
       this.im = im;
       this.offset = offset;
       if (this.offset == null) {
-        this.offset = {
-          x: this.im.width / 2,
-          y: this.im.height / 2
-        };
+        withImage(this.im, function(im) {
+          return _this.offset = {
+            x: _this.im.width / 2,
+            y: _this.im.height / 2
+          };
+        });
       }
     }
 
@@ -268,6 +309,7 @@
       _ref1 = this.offset, ox = _ref1[0], oy = _ref1[1];
       this.ctx.setTransform(1, 0, 0, 1, 0, 0);
       this.ctx.fillStyle = color;
+      this.ctx.clearRect(0, 0, w, h);
       this.ctx.fillRect(0, 0, w, h);
       return this.ctx.restore();
     };
@@ -321,26 +363,14 @@
 
   quadtree.reset();
 
-  Positional = (function(_super) {
-    __extends(Positional, _super);
-
-    function Positional() {
-      _ref = Positional.__super__.constructor.apply(this, arguments);
-      return _ref;
-    }
-
-    Positional.prototype.position = null;
-
-    return Positional;
-
-  })(Thing);
-
   Collidable = (function(_super) {
     __extends(Collidable, _super);
 
+    Collidable.prototype.position = null;
+
     function Collidable() {
-      var h, w, _ref1;
-      _ref1 = this.dimensions, w = _ref1[0], h = _ref1[1];
+      var h, w, _ref;
+      _ref = this.dimensions, w = _ref[0], h = _ref[1];
       this.box = {
         left: this.position.x - this.offset.x,
         top: this.position.y - this.offset.y,
@@ -360,15 +390,23 @@
 
     return Collidable;
 
-  })(Positional);
+  })(Thing);
 
   Obstacle = (function(_super) {
     __extends(Obstacle, _super);
 
-    function Obstacle() {
-      _ref1 = Obstacle.__super__.constructor.apply(this, arguments);
-      return _ref1;
+    Obstacle.prototype.isActiveCollider = true;
+
+    function Obstacle(position, velocity) {
+      this.position = position;
+      this.velocity = velocity;
+      Obstacle.__super__.constructor.call(this);
     }
+
+    Obstacle.prototype.update = function() {
+      this.position.add(this.velocity);
+      return Obstacle.__super__.update.call(this);
+    };
 
     return Obstacle;
 
@@ -378,8 +416,8 @@
     __extends(Pegasus, _super);
 
     function Pegasus() {
-      _ref2 = Pegasus.__super__.constructor.apply(this, arguments);
-      return _ref2;
+      _ref = Pegasus.__super__.constructor.apply(this, arguments);
+      return _ref;
     }
 
     return Pegasus;
@@ -390,9 +428,20 @@
     __extends(Satellite, _super);
 
     function Satellite() {
-      _ref3 = Satellite.__super__.constructor.apply(this, arguments);
-      return _ref3;
+      _ref1 = Satellite.__super__.constructor.apply(this, arguments);
+      return _ref1;
     }
+
+    Satellite.prototype.dimensions = [80, 80];
+
+    Satellite.prototype.offset = {
+      x: 40,
+      y: 40
+    };
+
+    Satellite.prototype.render = function() {
+      return game.sprites.satellite.draw(this.position);
+    };
 
     return Satellite;
 
@@ -402,20 +451,62 @@
     __extends(Balloon, _super);
 
     function Balloon() {
-      _ref4 = Balloon.__super__.constructor.apply(this, arguments);
-      return _ref4;
+      _ref2 = Balloon.__super__.constructor.apply(this, arguments);
+      return _ref2;
     }
+
+    Balloon.prototype.dimensions = [70, 140];
+
+    Balloon.prototype.offset = {
+      x: 35,
+      y: 90
+    };
+
+    Balloon.prototype.render = function() {
+      return game.sprites.balloon.draw(this.position);
+    };
 
     return Balloon;
 
   })(Obstacle);
 
+  Cloud = (function(_super) {
+    __extends(Cloud, _super);
+
+    Cloud.prototype.isActiveCollider = false;
+
+    Cloud.prototype.dimensions = [128, 96];
+
+    Cloud.prototype.offset = {
+      x: 128 / 2,
+      y: 96 / 2
+    };
+
+    function Cloud(position, velocity) {
+      this.position = position;
+      this.velocity = velocity;
+      Cloud.__super__.constructor.call(this);
+    }
+
+    Cloud.prototype.update = function() {
+      this.position.add(this.velocity);
+      return Cloud.__super__.update.call(this);
+    };
+
+    Cloud.prototype.render = function() {
+      return game.sprites.cloud.draw(this.position);
+    };
+
+    return Cloud;
+
+  })(Collidable);
+
   Meteor = (function(_super) {
     __extends(Meteor, _super);
 
     function Meteor() {
-      _ref5 = Meteor.__super__.constructor.apply(this, arguments);
-      return _ref5;
+      _ref3 = Meteor.__super__.constructor.apply(this, arguments);
+      return _ref3;
     }
 
     return Meteor;
@@ -446,7 +537,6 @@
       this.position = position;
       this.branch = branch;
       Star.__super__.constructor.call(this);
-      console.log('new star @', this.branch);
       this.hasFocus = false;
       this.angle = 0;
       inc = Math.PI * 2 / 10;
@@ -483,6 +573,7 @@
     };
 
     Star.prototype.setBranch = function(branch) {
+      this.branch.star = null;
       this.branch = branch;
       this.position = this.branch.tip;
       return this.branch.star = this;
@@ -514,6 +605,13 @@
 
     Branch.all = [];
 
+    Branch.growing = function() {
+      var _this = this;
+      return this.all.filter(function(b) {
+        return b.status.isGrowing;
+      });
+    };
+
     Branch.prototype.id = null;
 
     Branch.prototype.tip = null;
@@ -538,7 +636,7 @@
       this.status = {
         rate: Config.growthRate,
         branchAngle: Config.branchAngle,
-        branchDistance: Config.branchDistance,
+        branchDistance: Config.branchDistanceMax,
         knotDistance: Config.knotDistance,
         deadTime: 0,
         isGrowing: true,
@@ -554,17 +652,17 @@
     }
 
     Branch.prototype.collectStars = function() {
-      var branch, star, stars, _i, _j, _len, _len1, _ref6, _ref7;
+      var branch, star, stars, _i, _j, _len, _len1, _ref4, _ref5;
       stars = [];
       if (this.star != null) {
         stars.push(this.star);
       }
-      _ref6 = this.branches;
-      for (_i = 0, _len = _ref6.length; _i < _len; _i++) {
-        branch = _ref6[_i];
-        _ref7 = branch.collectStars();
-        for (_j = 0, _len1 = _ref7.length; _j < _len1; _j++) {
-          star = _ref7[_j];
+      _ref4 = this.branches;
+      for (_i = 0, _len = _ref4.length; _i < _len; _i++) {
+        branch = _ref4[_i];
+        _ref5 = branch.collectStars();
+        for (_j = 0, _len1 = _ref5.length; _j < _len1; _j++) {
+          star = _ref5[_j];
           stars.push(star);
         }
       }
@@ -587,7 +685,7 @@
       });
       this.branches = [left, right];
       this.status.isGrowing = false;
-      return this.star = null;
+      return this.status.markForNoGrow = true;
     };
 
     Branch.prototype.doKnot = function() {
@@ -598,17 +696,17 @@
     Branch.prototype.doStop = function() {
       this.status.isGrowing = false;
       this.status.isDead = true;
-      if (this.star) {
-        this.star.box.left = -9999;
+      game.stars = _.without(game.stars, this.star);
+      delete this.star;
+      if (game.stars.length === 0) {
+        return game.showGameOver();
       }
-      game.pruneTree();
-      return delete this.star;
     };
 
     Branch.prototype.handleInput = function(e) {};
 
     Branch.prototype.update = function() {
-      var a, branch, da, diff, growth, _i, _len, _ref6, _results;
+      var a, branch, da, diff, growth, _i, _len, _ref4, _results;
       if (this.status.isGrowing) {
         if (this.star.attraction != null) {
           this.status.knotDistance = Config.knotDistanceWhileThrusting;
@@ -627,17 +725,21 @@
         this.status.distanceTravelledKnot += this.status.rate;
         this.tip.add(growth);
         this.star.angle = growth.angle();
-        if (this.status.distanceTravelled > this.status.branchDistance) {
-          return this.doFork();
+        if (Config.autoFork && this.status.distanceTravelled > this.status.branchDistance) {
+          this.doFork();
         } else if (this.status.distanceTravelledKnot > this.status.knotDistance) {
           this.doKnot();
-          return this.status.distanceTravelledKnot = 0;
+          this.status.distanceTravelledKnot = 0;
+        }
+        if (this.status.markForNoGrow) {
+          this.status.markForNoGrow = false;
+          return this.star = null;
         }
       } else {
-        _ref6 = this.branches;
+        _ref4 = this.branches;
         _results = [];
-        for (_i = 0, _len = _ref6.length; _i < _len; _i++) {
-          branch = _ref6[_i];
+        for (_i = 0, _len = _ref4.length; _i < _len; _i++) {
+          branch = _ref4[_i];
           _results.push(branch.update());
         }
         return _results;
@@ -645,11 +747,11 @@
     };
 
     Branch.prototype.render = function() {
-      var branch, i, _i, _j, _len, _ref6, _ref7, _results;
+      var branch, i, _i, _j, _len, _ref4, _ref5, _results;
       game.ctx.save();
       game.ctx.beginPath();
       game.ctx.translate(-Config.branchWidth * 3 / 4, 0);
-      for (i = _i = 1, _ref6 = Config.branchFibers; 1 <= _ref6 ? _i <= _ref6 : _i >= _ref6; i = 1 <= _ref6 ? ++_i : --_i) {
+      for (i = _i = 1, _ref4 = Config.branchFibers; 1 <= _ref4 ? _i <= _ref4 : _i >= _ref4; i = 1 <= _ref4 ? ++_i : --_i) {
         game.ctx.lineWidth = Config.branchWidth;
         game.ctx.translate(Config.branchWidth / Config.branchFibers, 0);
         game.ctx.beginPath();
@@ -667,10 +769,10 @@
         game.ctx.arc(this.tip.x, this.tip.y, Config.starNovaRadius, 0, Math.PI * 2, true);
         return game.ctx.fill();
       } else {
-        _ref7 = this.branches;
+        _ref5 = this.branches;
         _results = [];
-        for (_j = 0, _len = _ref7.length; _j < _len; _j++) {
-          branch = _ref7[_j];
+        for (_j = 0, _len = _ref5.length; _j < _len; _j++) {
+          branch = _ref5[_j];
           _results.push(branch.render());
         }
         return _results;
@@ -680,46 +782,6 @@
     return Branch;
 
   })(Thing);
-
-  Cloud = (function(_super) {
-    __extends(Cloud, _super);
-
-    Cloud.prototype.isActiveCollider = false;
-
-    Cloud.prototype.dimensions = [128, 96];
-
-    Cloud.prototype.offset = {
-      x: 128 / 2,
-      y: 96 / 2
-    };
-
-    function Cloud(position, velocity) {
-      this.position = position;
-      this.velocity = velocity;
-      Cloud.__super__.constructor.call(this);
-    }
-
-    Cloud.prototype.update = function() {
-      this.position.add(this.velocity);
-      return Cloud.__super__.update.call(this);
-    };
-
-    Cloud.prototype.render = function() {
-      return game.sprites.cloud.draw(this.position);
-    };
-
-    Cloud.make = function(reference) {
-      var position, velocity;
-      position = new Vec(reference);
-      position.y -= game.height();
-      position.x += Math.random() * game.width() - game.width();
-      velocity = new Vec(Math.random() * 2, 0);
-      return new Cloud(position, velocity);
-    };
-
-    return Cloud;
-
-  })(Collidable);
 
   Starstalk = (function() {
     Starstalk.prototype.things = [];
@@ -741,6 +803,7 @@
       this.ctx.webkitImageSmoothingEnabled = this.ctx.imageSmoothingEnabled = this.ctx.mozImageSmoothingEnabled = this.ctx.oImageSmoothingEnabled = false;
       this.ctx.setTransform(1, 0, 0, 1, 0, 0);
       this.GFX = new GraphicsHelper(this.ctx);
+      this.obstacles = [];
       numRainbowColors = 256;
       this.rainbowColors = (function() {
         var _i, _results;
@@ -757,7 +820,9 @@
       };
       this.sprites = {
         star: new Sprite(Config.starImage, Config.starOffset),
-        cloud: new Sprite(Config.cloudImage)
+        cloud: new Sprite(Config.cloudImage),
+        balloon: new Sprite(Config.balloonImage),
+        satellite: new Sprite(Config.satelliteImage)
       };
       this.view = new Viewport(this.canvas, {
         scroll: new Vec(0, 0),
@@ -776,7 +841,7 @@
     };
 
     Starstalk.prototype.skyColor = function(height) {
-      var colorHi, colorLo, heightHi, heightLo, hi, layer, layerHi, layerLo, layers, lo, out, t, _i, _len;
+      var alpha, alphaHi, alphaLo, b, colorHi, colorLo, g, heightHi, heightLo, hi, layer, layerHi, layerLo, layers, lo, r, t, _i, _len, _ref4;
       layers = Config.atmosphere.layers;
       layerLo = layers[0];
       for (_i = 0, _len = layers.length; _i < _len; _i++) {
@@ -787,17 +852,18 @@
         }
         layerLo = layer;
       }
-      heightLo = layerLo[0], colorLo = layerLo[1];
-      heightHi = layerHi[0], colorHi = layerHi[1];
+      heightLo = layerLo[0], colorLo = layerLo[1], alphaLo = layerLo[2];
+      heightHi = layerHi[0], colorHi = layerHi[1], alphaHi = layerHi[2];
       t = (height - heightLo) / (heightHi - heightLo);
       lo = colorLo.toRgb();
       hi = colorHi.toRgb();
-      out = tinycolor({
+      alpha = lerp(alphaLo, alphaHi, t);
+      _ref4 = tinycolor({
         r: lerp(lo.r, hi.r, t),
         g: lerp(lo.g, hi.g, t),
         b: lerp(lo.b, hi.b, t)
-      }).toRgbString();
-      return out;
+      }).toRgb(), r = _ref4.r, g = _ref4.g, b = _ref4.b;
+      return "rgba(" + r + ", " + g + ", " + b + ", " + alpha + ")";
     };
 
     Starstalk.prototype.start = function() {
@@ -811,62 +877,115 @@
     Starstalk.prototype.doLoop = function() {
       var _this = this;
       return this.loopInterval = setInterval(function() {
-        var cloud, star, thing, things, _i, _j, _k, _len, _len1, _len2, _ref6, _ref7;
-        _this.view.clearScreen(_this.skyColor(_this.status.heightAchieved));
-        quadtree.reset();
-        _this.update();
-        _this.applyInput();
-        things = [_this.stalk];
-        _ref6 = _this.stars;
-        for (_i = 0, _len = _ref6.length; _i < _len; _i++) {
-          star = _ref6[_i];
-          things.push(star);
-        }
-        _ref7 = _this.clouds;
-        for (_j = 0, _len1 = _ref7.length; _j < _len1; _j++) {
-          cloud = _ref7[_j];
-          things.push(cloud);
-        }
-        if (!_this.status.paused) {
-          for (_k = 0, _len2 = things.length; _k < _len2; _k++) {
-            thing = things[_k];
-            thing.update();
-            thing.render();
+        var cloud, color, font, height, line, lines, obstacle, star, text, thing, things, width, x, y, _i, _j, _k, _l, _len, _len1, _len2, _len3, _len4, _m, _ref4, _ref5, _ref6;
+        if (_this.status.gameOver) {
+          _this.view.clearScreen(_this.tailColor());
+          _this.ctx.strokeStyle = '#333';
+          _this.ctx.fillStyle = '#333';
+          _this.ctx.lineWidth = 2;
+          _this.ctx.save();
+          _this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+          lines = [
+            {
+              text: "YOU ASCENDED",
+              font: "60px Arial",
+              height: 60
+            }, {
+              text: "" + (parseInt(_this.status.heightAchieved)) + " meters",
+              font: "80px Arial",
+              height: 80
+            }, {
+              text: "click to begin anew",
+              font: "60px Arial",
+              height: 80,
+              color: 'white'
+            }
+          ];
+          y = 100;
+          for (_i = 0, _len = lines.length; _i < _len; _i++) {
+            line = lines[_i];
+            text = line.text, font = line.font, height = line.height, color = line.color;
+            if (color != null) {
+              _this.ctx.strokeStyle = color;
+              _this.ctx.fillStyle = color;
+            }
+            _this.ctx.font = font;
+            width = _this.ctx.measureText(text).width;
+            x = _this.canvas.width / 2 - width / 2;
+            y += height * 1.5;
+            _this.ctx.fillText(text, x, y);
+            _this.ctx.strokeText(text, x, y);
           }
+          _this.ctx.restore();
+        } else {
+          color = _this.skyColor(_this.status.heightAchieved);
+          _this.view.clearScreen(color);
+          quadtree.reset();
+          _this.update();
+          _this.handleObstacles();
+          _this.applyInput();
+          things = [_this.stalk];
+          _ref4 = _this.stars;
+          for (_j = 0, _len1 = _ref4.length; _j < _len1; _j++) {
+            star = _ref4[_j];
+            things.push(star);
+          }
+          _ref5 = _this.clouds;
+          for (_k = 0, _len2 = _ref5.length; _k < _len2; _k++) {
+            cloud = _ref5[_k];
+            things.push(cloud);
+          }
+          _ref6 = _this.obstacles;
+          for (_l = 0, _len3 = _ref6.length; _l < _len3; _l++) {
+            obstacle = _ref6[_l];
+            things.push(obstacle);
+          }
+          if (!_this.status.paused) {
+            for (_m = 0, _len4 = things.length; _m < _len4; _m++) {
+              thing = things[_m];
+              thing.update();
+              thing.render();
+            }
+          }
+          _this.handleCollision();
+          _this.render();
         }
-        _this.handleCollision();
         _this.status.tailColorIndex += 1;
-        _this.status.tailColorIndex %= _this.rainbowColors.length;
-        return _this.render();
+        return _this.status.tailColorIndex %= _this.rainbowColors.length;
       }, parseInt(1000 / this.config.fps));
     };
 
     Starstalk.prototype.render = function() {
-      var box, _i, _len, _ref6, _results;
+      var box, _i, _len, _ref4, _results;
       this.ctx.font = "60px Arial";
       this.ctx.strokeStyle = '#333';
+      this.ctx.fillStyle = '#eee';
+      this.ctx.lineWidth = 2;
       this.ctx.save();
       this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+      this.ctx.fillText(parseInt(this.status.heightAchieved) + 'm', 50, 100);
       this.ctx.strokeText(parseInt(this.status.heightAchieved) + 'm', 50, 100);
       this.ctx.restore();
-      _ref6 = quadtree.getObjects();
-      _results = [];
-      for (_i = 0, _len = _ref6.length; _i < _len; _i++) {
-        box = _ref6[_i];
-        this.ctx.beginPath();
-        this.ctx.rect(box.left, box.top, box.width, box.height);
-        this.ctx.strokeStyle = 'red';
-        _results.push(this.ctx.stroke());
+      if (Config.debugDraw) {
+        _ref4 = quadtree.getObjects();
+        _results = [];
+        for (_i = 0, _len = _ref4.length; _i < _len; _i++) {
+          box = _ref4[_i];
+          this.ctx.beginPath();
+          this.ctx.rect(box.left, box.top, box.width, box.height);
+          this.ctx.strokeStyle = 'red';
+          _results.push(this.ctx.stroke());
+        }
+        return _results;
       }
-      return _results;
     };
 
     Starstalk.prototype.applyInput = function() {
-      var star, _i, _len, _ref6, _results;
-      _ref6 = this.stars;
+      var star, _i, _len, _ref4, _results;
+      _ref4 = this.stars;
       _results = [];
-      for (_i = 0, _len = _ref6.length; _i < _len; _i++) {
-        star = _ref6[_i];
+      for (_i = 0, _len = _ref4.length; _i < _len; _i++) {
+        star = _ref4[_i];
         if (game.mouseDown) {
           _results.push(star.setAttraction(game.view.screen2world(game.mouse)));
         } else {
@@ -877,83 +996,113 @@
     };
 
     Starstalk.prototype.handleCollision = function() {
-      var allDeadStars, collidable, deadStars, hit, hits, obj, safeStarIDs, star, _i, _j, _k, _l, _len, _len1, _len2, _len3, _len4, _m, _ref6, _ref7, _results,
+      var allDeadStars, collidable, deadStars, hit, hits, o, obj, safeStarIDs, star, _i, _j, _k, _l, _len, _len1, _len2, _len3, _len4, _len5, _m, _n, _ref4, _ref5, _ref6, _results,
         _this = this;
       collidable = [];
-      _ref6 = this.stars;
-      for (_i = 0, _len = _ref6.length; _i < _len; _i++) {
-        star = _ref6[_i];
+      _ref4 = this.stars;
+      for (_i = 0, _len = _ref4.length; _i < _len; _i++) {
+        star = _ref4[_i];
         collidable.push(star);
+      }
+      _ref5 = this.obstacles;
+      for (_j = 0, _len1 = _ref5.length; _j < _len1; _j++) {
+        o = _ref5[_j];
+        collidable.push(o);
       }
       allDeadStars = [];
       safeStarIDs = [];
-      for (_j = 0, _len1 = collidable.length; _j < _len1; _j++) {
-        obj = collidable[_j];
+      for (_k = 0, _len2 = collidable.length; _k < _len2; _k++) {
+        obj = collidable[_k];
         hits = _.uniq(quadtree.getObjects(obj.box.left, obj.box.top, obj.box.width, obj.box.height), function(hit) {
           return hit.object.constructor.name + hit.object.id;
         });
         if (hits.length > 1) {
           deadStars = [];
-          for (_k = 0, _len2 = hits.length; _k < _len2; _k++) {
-            hit = hits[_k];
+          for (_l = 0, _len3 = hits.length; _l < _len3; _l++) {
+            hit = hits[_l];
             if (hit.object instanceof Star) {
               deadStars.push(hit.object);
             }
           }
           if (__indexOf.call(allDeadStars, star) < 0) {
-            for (_l = 0, _len3 = deadStars.length; _l < _len3; _l++) {
-              star = deadStars[_l];
+            for (_m = 0, _len4 = deadStars.length; _m < _len4; _m++) {
+              star = deadStars[_m];
               allDeadStars.push(star);
             }
           }
         }
       }
-      if (allDeadStars.length > 0) {
-        console.log('dead', allDeadStars.map(function(s) {
-          return s.id;
-        }));
-        console.log('saved', safeStarIDs);
-      }
       _results = [];
-      for (_m = 0, _len4 = allDeadStars.length; _m < _len4; _m++) {
-        star = allDeadStars[_m];
-        if (!(!(_ref7 = star.id, __indexOf.call(safeStarIDs, _ref7) >= 0) && !star.isSafe())) {
-          continue;
+      for (_n = 0, _len5 = allDeadStars.length; _n < _len5; _n++) {
+        star = allDeadStars[_n];
+        if (!(_ref6 = star.id, __indexOf.call(safeStarIDs, _ref6) >= 0) && !star.isSafe()) {
+          _results.push(star.branch.doStop());
         }
-        console.log('DEATH', star);
-        _results.push(star.branch.doStop());
       }
       return _results;
     };
 
-    Starstalk.prototype.update = function() {
-      var cloud, h, highestStar, i, newScrollY, stars, w, _i, _len, _ref6, _ref7, _results;
-      _ref6 = this.view.dimensions(), w = _ref6[0], h = _ref6[1];
-      stars = this.stalk.collectStars();
-      this.stars = stars;
-      highestStar = _.min(stars, function(s) {
-        return s.position.y;
-      });
-      this.status.heightAchieved = -highestStar.position.y;
-      newScrollY = -h / 2 - highestStar.position.y;
-      if (newScrollY > this.view.scroll.y) {
-        this.view.scroll.y = Math.max(0, newScrollY);
+    Starstalk.prototype.handleObstacles = function() {
+      var cloud, height, i, obstacle, pos, position, velocity, _i, _j, _len, _len1, _ref4, _ref5, _results;
+      height = this.status.heightAchieved;
+      pos = this.status.highestStar.position;
+      position = new Vec(pos);
+      position.y -= game.height();
+      position.x += Math.random() * game.width() - game.width() * 2 / 3;
+      if (Math.random() < Config.probability.cloud(height) / this.config.fps) {
+        velocity = new Vec(Math.random() * 3, 0);
+        this.clouds.push(new Cloud(position, velocity));
+        console.log(position);
+      } else if (Math.random() < Config.probability.balloon(height) / this.config.fps) {
+        velocity = new Vec(Math.random() * 2, 0);
+        this.obstacles.push(new Balloon(position, velocity));
+        console.log(position);
+      } else if (Math.random() < Config.probability.satellite(height) / this.config.fps) {
+        velocity = new Vec(Math.random() * 4, 0);
+        this.obstacles.push(new Satellite(position, velocity));
+        console.log(position);
       }
-      this.view.update();
-      if (Math.random() < Config.cloudProbability / this.config.fps) {
-        this.clouds.push(Cloud.make(highestStar.position));
-      }
-      _ref7 = this.clouds;
-      _results = [];
-      for (cloud = _i = 0, _len = _ref7.length; _i < _len; cloud = ++_i) {
-        i = _ref7[cloud];
+      _ref4 = this.clouds;
+      for (cloud = _i = 0, _len = _ref4.length; _i < _len; cloud = ++_i) {
+        i = _ref4[cloud];
         if (cloud.x > this.width()) {
-          _results.push(this.clouds.splice(i, 1));
+          this.clouds.splice(i, 1);
+        }
+      }
+      _ref5 = this.obstacles;
+      _results = [];
+      for (obstacle = _j = 0, _len1 = _ref5.length; _j < _len1; obstacle = ++_j) {
+        i = _ref5[obstacle];
+        if (obstacle.x > this.width()) {
+          _results.push(this.obstacles.splice(i, 1));
         } else {
           _results.push(void 0);
         }
       }
       return _results;
+    };
+
+    Starstalk.prototype.update = function() {
+      var h, highestStar, newHeight, newScrollY, stars, w, _ref4;
+      _ref4 = this.view.dimensions(), w = _ref4[0], h = _ref4[1];
+      stars = this.stalk.collectStars();
+      this.stars = stars;
+      highestStar = _.min(stars, function(s) {
+        return s.position.y;
+      });
+      newHeight = -highestStar.position.y;
+      if (newHeight > this.status.heightAchieved) {
+        this.status.heightAchieved = newHeight;
+      }
+      this.status.highestStar = highestStar;
+      newScrollY = -h / 2 - highestStar.position.y;
+      if (newScrollY > this.view.scroll.y) {
+        this.view.scroll.y = Math.max(0, newScrollY);
+      }
+      this.view.update();
+      return $('body').css({
+        'background-position': "0 " + (this.status.heightAchieved / 10) + "px"
+      });
     };
 
     Starstalk.prototype.togglePause = function() {
@@ -983,10 +1132,9 @@
         switch (e.charCode) {
           case 32:
             return _this.togglePause();
-          case 115:
-            return _this.scroll.x -= 3;
-          case 119:
-            return _this.scroll.x += 3;
+          case 70 | 102:
+            _this.canvas.webkitRequestFullScreen();
+            return _this.canvas.mozRequestFullScreen();
         }
       });
       $(this.canvas).on('mousemove', function(e) {
@@ -994,8 +1142,21 @@
         return _this.mouse.y = e.offsetY;
       });
       $(this.canvas).on('mousedown', function(e) {
+        var branch, _i, _len, _ref4, _results;
         if (e.which === 1) {
           return _this.mouseDown = true;
+        } else if (e.which === 3) {
+          _ref4 = Branch.growing();
+          _results = [];
+          for (_i = 0, _len = _ref4.length; _i < _len; _i++) {
+            branch = _ref4[_i];
+            if (branch.status.distanceTravelled > Config.branchDistanceMin) {
+              _results.push(branch.doFork());
+            } else {
+              _results.push(void 0);
+            }
+          }
+          return _results;
         }
       });
       $(this.canvas).on('mouseup', function(e) {
@@ -1003,19 +1164,31 @@
           return _this.mouseDown = false;
         }
       });
+      $(this.canvas).on('contextmenu', function(e) {
+        return e.preventDefault();
+      });
       return $(document).on('keydown', function(e) {});
     };
 
-    Starstalk.prototype.startTasks = function() {
-      var _this = this;
-      return setInterval(function() {
-        return _this.pruneTree();
-      }, 10000);
+    Starstalk.prototype.unbindEvents = function() {
+      $(window).off('resize');
+      $(document).off('keypress keydown');
+      return $(this.canvas).off('mousemove mousedown mouseup contextmenu');
     };
 
+    Starstalk.prototype.showGameOver = function() {
+      var _this = this;
+      this.status.gameOver = true;
+      return $(this.canvas).on('mousedown', function(e) {
+        return newGame();
+      });
+    };
+
+    Starstalk.prototype.startTasks = function() {};
+
     Starstalk.prototype.pruneTree = function() {
-      var cloud, height, i, left, obj, r, rejected, rejectedStars, top, width, _i, _j, _len, _len1, _ref6, _ref7;
-      _ref6 = game.view.worldBounds(), left = _ref6.left, top = _ref6.top, width = _ref6.width, height = _ref6.height;
+      var cloud, height, i, left, obj, r, rejected, rejectedStars, top, width, _i, _j, _len, _len1, _ref4, _ref5;
+      _ref4 = game.view.worldBounds(), left = _ref4.left, top = _ref4.top, width = _ref4.width, height = _ref4.height;
       rejected = quadtree.prune(left, top, width, height);
       for (_i = 0, _len = rejected.length; _i < _len; _i++) {
         r = rejected[_i];
@@ -1023,9 +1196,9 @@
         if (obj instanceof Star) {
           obj.branch.doStop();
         } else if (obj instanceof Cloud) {
-          _ref7 = game.clouds;
-          for (cloud = _j = 0, _len1 = _ref7.length; _j < _len1; cloud = ++_j) {
-            i = _ref7[cloud];
+          _ref5 = game.clouds;
+          for (cloud = _j = 0, _len1 = _ref5.length; _j < _len1; cloud = ++_j) {
+            i = _ref5[cloud];
             if (obj === cloud) {
               game.clouds.splice(i, 1);
               console.log('killed cloud');
@@ -1033,27 +1206,32 @@
           }
         }
       }
-      rejectedStars = rejected.filter(function(r) {
+      return rejectedStars = rejected.filter(function(r) {
         return r instanceof Star;
       });
-      if (rejected.length > 0) {
-        return console.log('REJECTS', rejected);
-      }
     };
 
     return Starstalk;
 
   })();
 
-  $(function() {
-    var $body;
-    $body = $('body');
+  newGame = function() {
+    if (game != null) {
+      game.unbindEvents();
+      clearInterval(game.loopInterval);
+    }
     game = new Starstalk({
       $canvas: $('#game')
     });
     GFX = game.GFX;
     world = game.world;
     return game.start();
+  };
+
+  $(function() {
+    var $body;
+    $body = $('body');
+    return newGame();
   });
 
 }).call(this);
