@@ -26,6 +26,12 @@ class Vec
 		@x -= v.x
 		@y -= v.y
 
+	lengthSquared: ->
+		return @x*@x + @y*@y
+
+	length: ->
+		Math.sqrt @lengthSquared()
+
 	angle: ->
 		return Math.atan2 @y, @x
 
@@ -74,7 +80,7 @@ class Viewport
 		@scale ?= 1
 		@ctx = @canvas.getContext '2d'
 		[w, h] = [@canvas.width, @canvas.height]
-		@offset = [w/2, h/2]	
+		@offset = [w/2, h/2]
 	
 	_setTransform: ->
 		[w, h] = [@canvas.width, @canvas.height]
@@ -99,9 +105,43 @@ class Viewport
 		@ctx.restore()
 	
 	dimensions: -> [@canvas.width, @canvas.height]
+	worldDimensions: -> [@canvas.width, @canvas.height]
+
+	worldBounds: ->
+		[w,h] = @worldDimensions()
+		[ox, oy] = @offset
+		left: -(ox + @scroll.x + 0.5)
+		top: -(oy + @scroll.y + 0.5)
+		width: w
+		height: h
+
+	screen2world: (screen) ->
+		[ox, oy] = @offset
+		new Vec( screen.x - (ox + @scroll.x + 0.5), screen.y - (oy + @scroll.y + 0.5) )
 
 	centerOn: (point) ->
 		[w, h] = [@canvas.width, @canvas.height]
 
 	update: ->
 		@_setTransform()
+
+
+
+
+# class Collidable extends Positional
+
+# 	createBody: ->
+# 		shape = new b2PolygonShape()
+# 		console.log shape
+# 		shape.set_m_radius( 0.5 )
+
+# 		body.CreateFixture( circleShape, 1.0 )
+# 		bodyDef = new b2BodyDef()
+# 		bodyDef.set_type( b2_staticBody )
+# 		@body = world.CreateBody( bodyDef )
+# 		@b2position = new b2Vec2(@position.x, @position.y)
+
+# 	update: ->
+# 		@b2position.x = @position.x
+# 		@b2position.y = @position.y
+# 		@body.set_position(@b2position)
