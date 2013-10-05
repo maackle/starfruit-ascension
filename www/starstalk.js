@@ -1,9 +1,9 @@
 (function() {
-  var Atmosphere, Balloon, Branch, Cloud, Collidable, Config, Cookie, GFX, GraphicsHelper, NotImplemented, Nova, Obstacle, Satellite, Sprite, Star, Starstalk, Thing, Vec, Viewport, atmoscale, balloonAABBDim, balloonAABBOffset, balloonSpriteOffset, balloonTopDim, clampAngleSigned, game, i, lerp, makeImage, newGame, quadtree, withImage, withImages, world,
+  var Atmosphere, Balloon, Branch, Cloud, Collidable, Config, Cookie, GFX, GameEngine, GameOverState, GameState, M, Module, ModuleOriginal, NotImplemented, Nova, Obstacle, PlayState, Quad, Satellite, Sprite, Star, Thing, Vec, Viewport, atmoscale, balloonAABBDim, balloonAABBOffset, balloonSpriteOffset, balloonTopDim, clampAngleSigned, game, i, lerp, makeImage, quadtree, withImage, withImages, world, _ref,
     __slice = [].slice,
+    __indexOf = [].indexOf || function(item) { for (var i = 0, l = this.length; i < l; i++) { if (i in this && this[i] === item) return i; } return -1; },
     __hasProp = {}.hasOwnProperty,
-    __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; },
-    __indexOf = [].indexOf || function(item) { for (var i = 0, l = this.length; i < l; i++) { if (i in this && this[i] === item) return i; } return -1; };
+    __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
 
   lerp = function(a, b, t) {
     return a * (1 - t) + b * t;
@@ -168,12 +168,42 @@
     }
   };
 
+  'use strict';
+
+  M = {};
+
   NotImplemented = {};
 
+  Module = (function() {
+    function Module() {}
+
+    Module.__keywords = ['extended'];
+
+    Module.extend = function(obj) {
+      var key, value, _ref, _ref1;
+      for (key in obj) {
+        value = obj[key];
+        if (__indexOf.call(Module.__keywords, key) < 0) {
+          this[key] = value;
+        }
+      }
+      _ref = obj.Meta;
+      for (key in _ref) {
+        value = _ref[key];
+        this.prototype[key] = value;
+      }
+      return (_ref1 = obj.extended) != null ? _ref1.apply(this) : void 0;
+    };
+
+    return Module;
+
+  })();
+
   Vec = (function() {
-    Vec.zero = {
-      x: 0,
-      y: 0
+    Vec.immutable = function() {
+      var v;
+      v = new Vec(arguments);
+      return Object.freeze(v);
     };
 
     Vec.polar = function(r, t) {
@@ -219,6 +249,40 @@
     };
 
     return Vec;
+
+  })();
+
+  Vec.zero = Vec.immutable(0, 0);
+
+  Vec.one = Vec.immutable(1, 1);
+
+  M.Image = (function() {
+    Image._cache = {};
+
+    Image.prototype.loaded = false;
+
+    function Image(o) {
+      var hit, im,
+        _this = this;
+      if (o instanceof Image) {
+        im = o;
+      } else {
+        hit = M.Image._cache[o] != null;
+        if (hit) {
+          im = hit;
+        } else {
+          im = new Image;
+          im.src = o;
+          im.onload = function() {
+            return _this.loaded = true;
+          };
+          M.image._cache[0] = im;
+        }
+      }
+      this.image = im;
+    }
+
+    return Image;
 
   })();
 
@@ -286,29 +350,24 @@
 
   })();
 
-  GraphicsHelper = (function() {
-    function GraphicsHelper(ctx) {
-      this.ctx = ctx;
-    }
-
-    GraphicsHelper.prototype.drawLineString = function() {
-      var more, points, vec, _i, _j, _len, _len1, _ref, _results;
-      points = arguments[0], more = 2 <= arguments.length ? __slice.call(arguments, 1) : [];
-      this.ctx.moveTo(points[0].x, points[0].y);
+  GFX = {
+    drawLineString: function() {
+      var ctx, more, points, vec, _i, _j, _len, _len1, _ref, _results;
+      ctx = arguments[0], points = arguments[1], more = 3 <= arguments.length ? __slice.call(arguments, 2) : [];
+      ctx.moveTo(points[0].x, points[0].y);
       _ref = points.slice(1);
       for (_i = 0, _len = _ref.length; _i < _len; _i++) {
         vec = _ref[_i];
-        this.ctx.lineTo(vec.x, vec.y);
+        ctx.lineTo(vec.x, vec.y);
       }
       _results = [];
       for (_j = 0, _len1 = more.length; _j < _len1; _j++) {
         vec = more[_j];
-        _results.push(this.ctx.lineTo(vec.x, vec.y));
+        _results.push(ctx.lineTo(vec.x, vec.y));
       }
       return _results;
-    };
-
-    GraphicsHelper.prototype.drawImage = function(im, pos, offset) {
+    },
+    drawImage: function(ctx, im, pos, offset) {
       var _this = this;
       if (offset == null) {
         offset = {
@@ -317,19 +376,109 @@
         };
       }
       return withImage(im, function(im) {
-        return _this.ctx.drawImage(im, pos.x - offset.x, pos.y - offset.y);
+        return ctx.drawImage(im, pos.x - offset.x, pos.y - offset.y);
       });
+    }
+  };
+
+  ModuleOriginal = (function() {
+    function ModuleOriginal() {}
+
+    ModuleOriginal.__keywords = ['extended', 'included'];
+
+    ModuleOriginal.extend = function(obj) {
+      var key, value, _ref;
+      for (key in obj) {
+        value = obj[key];
+        if (__indexOf.call(Moduler.__keywords, key) < 0) {
+          this[key] = value;
+        }
+      }
+      if ((_ref = obj.extended) != null) {
+        _ref.apply(this);
+      }
+      return this;
     };
 
-    return GraphicsHelper;
+    ModuleOriginal.include = function(obj) {
+      var key, value, _ref;
+      for (key in obj) {
+        value = obj[key];
+        if (__indexOf.call(Moduler.__keywords, key) < 0) {
+          this.prototype[key] = value;
+        }
+      }
+      if ((_ref = obj.included) != null) {
+        _ref.apply(this);
+      }
+      return this;
+    };
+
+    return ModuleOriginal;
+
+  })();
+
+  (function() {
+    'use strict';
+    var B2Body, B2World, Mixin;
+    Mixin = (function() {
+      function Mixin() {}
+
+      return Mixin;
+
+    })();
+    B2World = (function() {
+      function B2World() {}
+
+      B2World.prototype.world = null;
+
+      return B2World;
+
+    })();
+    return B2Body = (function() {
+      function B2Body() {}
+
+      B2Body.prototype.body = null;
+
+      return B2Body;
+
+    })();
+  })();
+
+  Quad = (function() {
+    Quad.prototype.x = null;
+
+    Quad.prototype.y = null;
+
+    Quad.prototype.w = null;
+
+    Quad.prototype.h = null;
+
+    function Quad() {
+      if (arguments.length === 4) {
+        this.x = arguments[0], this.y = arguments[1], this.w = arguments[2], this.h = arguments[3];
+      } else {
+        throw 'unsupported Quad arguments';
+      }
+    }
+
+    Quad.prototype.width = function() {
+      return w;
+    };
+
+    Quad.prototype.height = function() {
+      return h;
+    };
+
+    return Quad;
 
   })();
 
   Viewport = (function() {
-    function Viewport(canvas, _arg) {
+    function Viewport(canvas, opts) {
       var h, w, _ref;
       this.canvas = canvas;
-      this.anchor = _arg.anchor, this.scroll = _arg.scroll, this.scale = _arg.scale;
+      this.anchor = opts.anchor, this.scroll = opts.scroll, this.scale = opts.scale;
       if (this.scale == null) {
         this.scale = 1;
       }
@@ -383,13 +532,9 @@
       return [this.canvas.width, this.canvas.height];
     };
 
-    Viewport.prototype.worldDimensions = function() {
-      return [this.canvas.width, this.canvas.height];
-    };
-
     Viewport.prototype.worldBounds = function() {
       var h, ox, oy, w, _ref, _ref1;
-      _ref = this.worldDimensions(), w = _ref[0], h = _ref[1];
+      _ref = [this.canvas.width, this.canvas.height], w = _ref[0], h = _ref[1];
       _ref1 = this.offset, ox = _ref1[0], oy = _ref1[1];
       return {
         left: -(ox + this.scroll.x + 0.5),
@@ -415,6 +560,169 @@
     };
 
     return Viewport;
+
+  })();
+
+  GameState = (function() {
+    function GameState() {}
+
+    GameState.prototype._boundEvents = [];
+
+    GameState.prototype.game = null;
+
+    GameState.prototype.parent = null;
+
+    GameState.prototype.bind = function(what, events, fn) {
+      return this._boundEvents.push([what, events, fn]);
+    };
+
+    GameState.prototype._bindEvents = function() {
+      var e, events, fn, what, _i, _len, _ref, _results;
+      _ref = this._boundEvents;
+      _results = [];
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        e = _ref[_i];
+        what = e[0], events = e[1], fn = e[2];
+        _results.push($(what).on(events, fn));
+      }
+      return _results;
+    };
+
+    GameState.prototype._unbindEvents = function() {
+      var e, events, fn, what, _i, _len, _ref, _results;
+      _ref = this._boundEvents;
+      _results = [];
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        e = _ref[_i];
+        what = e[0], events = e[1], fn = e[2];
+        _results.push($(what).off(events));
+      }
+      return _results;
+    };
+
+    GameState.prototype.enter = function() {};
+
+    GameState.prototype.exit = function() {};
+
+    GameState.prototype.update = function(dt) {};
+
+    GameState.prototype.render = function() {};
+
+    return GameState;
+
+  })();
+
+  GameEngine = (function() {
+    GameEngine.prototype.canvas = null;
+
+    GameEngine.prototype.mouse = new Vec(0, 0);
+
+    GameEngine.prototype.config = {};
+
+    GameEngine.prototype.states = [];
+
+    GameEngine.prototype.intervals = {
+      gameLoop: null
+    };
+
+    function GameEngine(opts) {
+      var _ref;
+      this.config = _.defaults(opts, {
+        fps: 30,
+        fullscreen: true
+      });
+      this.canvas = (function() {
+        if ((_ref = opts.canvas) != null) {
+          return _ref;
+        } else {
+          throw 'no canvas supplied';
+        }
+      })();
+      this.pushState(opts.initialState);
+      this._bindEvents();
+    }
+
+    GameEngine.prototype.start = function() {
+      var _this = this;
+      if (this._isValid()) {
+        return this.intervals.gameLoop = setInterval(function() {
+          return _this.doLoop(1 / _this.config.fps);
+        }, parseInt(1000 / this.config.fps));
+      } else {
+        return console.error('failed to start game due to previous errors');
+      }
+    };
+
+    GameEngine.prototype.stop = function() {
+      return clearInterval(this.intervals.gameLoop);
+    };
+
+    GameEngine.prototype.currentState = function() {
+      return this.states[this.states.length - 1];
+    };
+
+    GameEngine.prototype.pushState = function(state) {
+      state.game = this;
+      state.parent = this.currentState();
+      this.states.push(state);
+      state._bindEvents();
+      return state.enter();
+    };
+
+    GameEngine.prototype.popState = function() {
+      var state;
+      state = this.states.pop();
+      state.exit();
+      state._unbindEvents();
+      state.game = null;
+      state.parent = null;
+      return state;
+    };
+
+    GameEngine.prototype.doLoop = function(dt) {
+      var state;
+      state = this.currentState();
+      if (!state instanceof GameState) {
+        throw 'not a state';
+      }
+      state.update(dt);
+      return state.render();
+    };
+
+    GameEngine.prototype._bindEvents = function() {
+      var _this = this;
+      $(document).on('keypress', function(e) {
+        switch (e.charCode) {
+          case 32:
+            return _this.togglePause();
+          case 70 | 102:
+            _this.canvas.webkitRequestFullScreen();
+            return _this.canvas.mozRequestFullScreen();
+        }
+      });
+      $(this.canvas).on('mousemove', function(e) {
+        _this.mouse.x = e.offsetX || e.layerX;
+        return _this.mouse.y = e.offsetY || e.layerY;
+      });
+      $(this.canvas).on('contextmenu', function(e) {
+        return e.preventDefault();
+      });
+      $(window).on('resize', function(e) {
+        var $body;
+        $body = $('body');
+        return $(_this.canvas).attr({
+          width: $body.width(),
+          height: $body.height()
+        });
+      });
+      return $(window).trigger('resize');
+    };
+
+    GameEngine.prototype._isValid = function() {
+      return this.canvas != null;
+    };
+
+    return GameEngine;
 
   })();
 
@@ -936,493 +1244,55 @@
 
   })(Thing);
 
-  Starstalk = (function() {
-    Starstalk.prototype.things = [];
+  GameOverState = (function(_super) {
+    __extends(GameOverState, _super);
 
-    Starstalk.prototype.clouds = [];
-
-    Starstalk.prototype.novae = [];
-
-    Starstalk.prototype.loopInterval = null;
-
-    Starstalk.prototype.config = {
-      fps: 30
-    };
-
-    function Starstalk(_arg) {
-      var numRainbowColors, p;
-      this.$canvas = _arg.$canvas;
-      this.mouse = new Vec(0, 0);
-      this.canvas = this.$canvas.get(0);
-      this.ctx = this.canvas.getContext('2d');
-      this.ctx.webkitImageSmoothingEnabled = this.ctx.imageSmoothingEnabled = this.ctx.mozImageSmoothingEnabled = this.ctx.oImageSmoothingEnabled = false;
-      this.ctx.setTransform(1, 0, 0, 1, 0, 0);
-      this.GFX = new GraphicsHelper(this.ctx);
-      this.obstacles = [];
-      numRainbowColors = 256;
-      this.rainbowColors = (function() {
-        var _i, _results;
-        _results = [];
-        for (p = _i = 0; 0 <= numRainbowColors ? _i <= numRainbowColors : _i >= numRainbowColors; p = 0 <= numRainbowColors ? ++_i : --_i) {
-          _results.push(tinycolor("hsv(" + (p * 100 / numRainbowColors) + "%, 50%, 100%)").toRgbString());
-        }
-        return _results;
-      })();
-      this.status = {
-        paused: false,
-        tailColorIndex: 0,
-        heightAchieved: 0
-      };
-      this.sprites = {
-        star: new Sprite(Config.starImage, Config.starOffset),
-        cloud: new Sprite(Config.cloudImage),
-        balloon: new Sprite(Config.balloonImage, balloonSpriteOffset),
-        satellite: new Sprite(Config.satelliteImage),
-        cookie: new Sprite(Config.cookieImage)
-      };
-      this.view = new Viewport(this.canvas, {
-        scroll: new Vec(0, 0),
-        anchor: {
-          bottom: 20
-        }
-      });
+    function GameOverState() {
+      _ref = GameOverState.__super__.constructor.apply(this, arguments);
+      return _ref;
     }
 
-    Starstalk.prototype.width = function() {
-      return this.canvas.width;
-    };
+    return GameOverState;
 
-    Starstalk.prototype.height = function() {
-      return this.canvas.height;
-    };
+  })(GameState);
 
-    Starstalk.prototype.skyColor = function(height) {
-      var alpha, alphaHi, alphaLo, b, colorHi, colorLo, g, heightHi, heightLo, hi, layer, layerHi, layerLo, layers, lo, r, t, _i, _len, _ref;
-      layers = Config.atmosphere.layers;
-      layerLo = layers[0];
-      for (_i = 0, _len = layers.length; _i < _len; _i++) {
-        layer = layers[_i];
-        layerHi = layer;
-        if (layerHi[0] > height) {
-          break;
-        }
-        layerLo = layer;
-      }
-      heightLo = layerLo[0], colorLo = layerLo[1], alphaLo = layerLo[2];
-      heightHi = layerHi[0], colorHi = layerHi[1], alphaHi = layerHi[2];
-      t = (height - heightLo) / (heightHi - heightLo);
-      lo = colorLo.toRgb();
-      hi = colorHi.toRgb();
-      alpha = lerp(alphaLo, alphaHi, t);
-      _ref = tinycolor({
-        r: lerp(lo.r, hi.r, t),
-        g: lerp(lo.g, hi.g, t),
-        b: lerp(lo.b, hi.b, t)
-      }).toRgb(), r = _ref.r, g = _ref.g, b = _ref.b;
-      return "rgba(" + r + ", " + g + ", " + b + ", " + alpha + ")";
-    };
+  PlayState = (function(_super) {
+    __extends(PlayState, _super);
 
-    Starstalk.prototype.start = function() {
-      this.bindEvents();
-      this.startTasks();
-      $(window).trigger('resize');
-      this.stalk = new Branch(new Vec(0, 0), -Math.PI / 2);
-      return this.doLoop();
-    };
+    PlayState.prototype.view = null;
 
-    Starstalk.prototype.doLoop = function() {
-      var _this = this;
-      return this.loopInterval = setInterval(function() {
-        var b, cloud, color, font, g, height, line, lines, nova, obstacle, r, star, text, thing, things, width, x, y, _i, _j, _k, _l, _len, _len1, _len2, _len3, _len4, _len5, _len6, _m, _n, _o, _ref, _ref1, _ref2, _ref3, _ref4, _ref5;
-        if (_this.status.gameOver) {
-          _ref = tinycolor(_this.tailColor()).toRgb(), r = _ref.r, g = _ref.g, b = _ref.b;
-          _this.view.fillScreen("rgba(" + r + "," + g + "," + b + ",0.5)");
-          _ref1 = game.novae;
-          for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
-            nova = _ref1[_i];
-            nova.update(0.25);
-            nova.render();
-          }
-          _this.ctx.lineWidth = 1.5;
-          _this.ctx.fillStyle = '#222';
-          _this.ctx.strokeStyle = '#222';
-          _this.ctx.save();
-          _this.ctx.setTransform(1, 0, 0, 1, 0, 0);
-          lines = [
-            {
-              text: "YOU ASCENDED",
-              font: "70px " + Config.mainFont,
-              height: 70
-            }, {
-              text: "" + (parseInt(_this.status.heightAchieved)) + " meters",
-              font: "100px " + Config.mainFont,
-              height: 100
-            }, {
-              text: "click to begin anew",
-              font: "80px " + Config.mainFont,
-              height: 100,
-              color: 'white'
-            }
-          ];
-          y = 100;
-          for (_j = 0, _len1 = lines.length; _j < _len1; _j++) {
-            line = lines[_j];
-            text = line.text, font = line.font, height = line.height, color = line.color;
-            if (color != null) {
-              _this.ctx.strokeStyle = color;
-              _this.ctx.fillStyle = color;
-            }
-            _this.ctx.font = font;
-            width = _this.ctx.measureText(text).width;
-            x = _this.canvas.width / 2 - width / 2;
-            y += height * 1.5;
-            _this.ctx.strokeText(text, x, y);
-          }
-          _this.ctx.restore();
-        } else {
-          color = _this.skyColor(_this.status.heightAchieved);
-          _this.view.clearScreen(color);
-          quadtree.reset();
-          _this.update();
-          _this.handleObstacles();
-          _this.applyInput();
-          things = [_this.stalk];
-          _ref2 = _this.stars;
-          for (_k = 0, _len2 = _ref2.length; _k < _len2; _k++) {
-            star = _ref2[_k];
-            things.push(star);
-          }
-          _ref3 = _this.clouds;
-          for (_l = 0, _len3 = _ref3.length; _l < _len3; _l++) {
-            cloud = _ref3[_l];
-            things.push(cloud);
-          }
-          _ref4 = _this.novae;
-          for (_m = 0, _len4 = _ref4.length; _m < _len4; _m++) {
-            nova = _ref4[_m];
-            things.push(nova);
-          }
-          _ref5 = _this.obstacles;
-          for (_n = 0, _len5 = _ref5.length; _n < _len5; _n++) {
-            obstacle = _ref5[_n];
-            things.push(obstacle);
-          }
-          if (!_this.status.paused) {
-            for (_o = 0, _len6 = things.length; _o < _len6; _o++) {
-              thing = things[_o];
-              thing.update();
-              thing.render();
-            }
-          }
-          _this.handleCollision();
-          _this.render();
-        }
-        _this.status.tailColorIndex += 1;
-        return _this.status.tailColorIndex %= _this.rainbowColors.length;
-      }, parseInt(1000 / this.config.fps));
-    };
+    function PlayState() {}
 
-    Starstalk.prototype.render = function() {
-      var box, _i, _len, _ref, _results;
-      this.ctx.font = "60px " + Config.hudFont;
-      this.ctx.strokeStyle = '#333';
-      this.ctx.fillStyle = '#eee';
-      this.ctx.lineWidth = 1.5;
-      this.ctx.save();
-      this.ctx.setTransform(1, 0, 0, 1, 0, 0);
-      this.ctx.fillText(parseInt(this.status.heightAchieved) + 'm', 50, 100);
-      this.ctx.restore();
-      if (Config.debugDraw) {
-        _ref = quadtree.getObjects();
-        _results = [];
-        for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-          box = _ref[_i];
-          this.ctx.beginPath();
-          this.ctx.rect(box.left, box.top, box.width, box.height);
-          this.ctx.strokeStyle = 'red';
-          _results.push(this.ctx.stroke());
-        }
-        return _results;
-      }
-    };
-
-    Starstalk.prototype.applyInput = function() {
-      var star, _i, _len, _ref, _results;
-      _ref = this.stars;
-      _results = [];
-      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        star = _ref[_i];
-        if (game.mouseDown) {
-          _results.push(star.setAttraction(game.view.screen2world(game.mouse)));
-        } else {
-          _results.push(star.setAttraction(null));
-        }
-      }
-      return _results;
-    };
-
-    Starstalk.prototype.handleCollision = function() {
-      var allDeadStars, bounds, collidable, deadStars, dist, hit, hits, o, obj, pos, safeStarIDs, star, _i, _j, _k, _l, _len, _len1, _len2, _len3, _len4, _len5, _len6, _m, _n, _o, _ref, _ref1, _ref2, _ref3, _results,
-        _this = this;
-      bounds = this.view.worldBounds();
-      collidable = [];
-      _ref = this.stars;
-      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        star = _ref[_i];
-        collidable.push(star);
-      }
-      _ref1 = this.obstacles;
-      for (_j = 0, _len1 = _ref1.length; _j < _len1; _j++) {
-        o = _ref1[_j];
-        collidable.push(o);
-      }
-      allDeadStars = [];
-      safeStarIDs = [];
-      for (_k = 0, _len2 = collidable.length; _k < _len2; _k++) {
-        obj = collidable[_k];
-        hits = _.uniq(quadtree.getObjects(obj.box.left, obj.box.top, obj.box.width, obj.box.height), function(hit) {
-          return hit.object.constructor.name + hit.object.id;
-        });
-        if (hits.length > 1) {
-          deadStars = [];
-          for (_l = 0, _len3 = hits.length; _l < _len3; _l++) {
-            hit = hits[_l];
-            if (hit.object instanceof Star) {
-              deadStars.push(hit.object);
-            }
-          }
-          if (__indexOf.call(allDeadStars, star) < 0) {
-            for (_m = 0, _len4 = deadStars.length; _m < _len4; _m++) {
-              star = deadStars[_m];
-              allDeadStars.push(star);
-            }
-          }
-        }
-      }
-      for (_n = 0, _len5 = allDeadStars.length; _n < _len5; _n++) {
-        star = allDeadStars[_n];
-        if (!(_ref2 = star.id, __indexOf.call(safeStarIDs, _ref2) >= 0) && !star.isSafe()) {
-          star.branch.doStop();
-        }
-      }
-      _ref3 = this.stars;
-      _results = [];
-      for (_o = 0, _len6 = _ref3.length; _o < _len6; _o++) {
-        star = _ref3[_o];
-        pos = new Vec(star.position);
-        dist = pos.sub(this.status.highestStar.position).length();
-        if (dist > this.maxAbsoluteDistanceBeforeDeath()) {
-          _results.push(star.branch.doStop());
-        } else if (star.position.x < bounds.left - Config.autokillOffscreenX || star.position.x > bounds.left + bounds.width + Config.autokillOffscreenX) {
-          _results.push(star.branch.doStop());
-        } else {
-          _results.push(void 0);
-        }
-      }
-      return _results;
-    };
-
-    Starstalk.prototype.maxAbsoluteDistanceBeforeDeath = function() {
-      return Config.autokillDistanceRatio * Math.max(this.canvas.width, this.canvas.height);
-    };
-
-    Starstalk.prototype.handleObstacles = function() {
-      var cloud, height, obstacle, pos, position, velocity, _i, _j, _len, _len1, _ref, _ref1, _results;
-      height = this.status.heightAchieved;
-      pos = this.status.highestStar.position;
-      position = new Vec(pos);
-      position.y -= game.height();
-      position.x += Math.random() * game.width() - game.width() * 2 / 3;
-      if (Math.random() < Config.probability.cloud(height) / this.config.fps) {
-        velocity = new Vec(Math.random() * 3, 0);
-        this.clouds.push(new Cloud(position, velocity));
-      } else if (Math.random() < Config.probability.balloon(height) / this.config.fps) {
-        velocity = new Vec(Math.random() * 2, 0);
-        this.obstacles.push(new Balloon(position, velocity));
-      } else if (Math.random() < Config.probability.satellite(height) / this.config.fps) {
-        velocity = new Vec(Math.random() * 4, 0);
-        this.obstacles.push(new Satellite(position, velocity));
-      } else if (Math.random() < Config.probability.cookie(height) / this.config.fps) {
-        velocity = new Vec(Math.random() * 4, 0);
-        this.obstacles.push(new Cookie(position, velocity));
-      }
-      _ref = this.clouds;
-      for (cloud = _i = 0, _len = _ref.length; _i < _len; cloud = ++_i) {
-        i = _ref[cloud];
-        if (cloud.x > this.width()) {
-          this.clouds.splice(i, 1);
-        }
-      }
-      _ref1 = this.obstacles;
-      _results = [];
-      for (obstacle = _j = 0, _len1 = _ref1.length; _j < _len1; obstacle = ++_j) {
-        i = _ref1[obstacle];
-        if (obstacle.x > this.width()) {
-          _results.push(this.obstacles.splice(i, 1));
-        } else {
-          _results.push(void 0);
-        }
-      }
-      return _results;
-    };
-
-    Starstalk.prototype.update = function() {
-      var h, highestStar, newHeight, newScrollY, stars, w, _ref;
-      _ref = this.view.dimensions(), w = _ref[0], h = _ref[1];
-      stars = this.stalk.collectStars();
-      this.stars = stars;
-      if (stars.length === 1) {
-        highestStar = stars[0];
-      } else {
-        highestStar = _.min(stars, function(s) {
-          return s.position.y;
-        });
-      }
-      newHeight = -highestStar.position.y;
-      if (newHeight > this.status.heightAchieved) {
-        this.status.heightAchieved = newHeight;
-      }
-      this.status.highestStar = highestStar;
-      newScrollY = -h / 2 - highestStar.position.y;
-      if (newScrollY > this.view.scroll.y) {
-        this.view.scroll.y = Math.max(0, newScrollY);
-      }
-      this.view.update();
-      return $('body').css({
-        'background-position': "0 " + (this.status.heightAchieved / 10) + "px"
+    PlayState.prototype.enter = function() {
+      console.log(this.game);
+      return this.view = new Viewport(this.game.canvas, {
+        anchor: 'center'
       });
     };
 
-    Starstalk.prototype.togglePause = function() {
-      this.status.paused = !this.status.paused;
-      if (this.status.paused) {
-        return clearInterval(this.loopInterval);
-      } else {
-        return this.doLoop();
-      }
+    PlayState.prototype.exit = function() {};
+
+    PlayState.prototype.update = function(dt) {};
+
+    PlayState.prototype.render = function(dt) {
+      return this.view.clearScreen('blue');
     };
 
-    Starstalk.prototype.tailColor = function(factor) {
-      if (factor == null) {
-        factor = 1;
-      }
-      return this.rainbowColors[(this.status.tailColorIndex * factor) % this.rainbowColors.length];
-    };
+    return PlayState;
 
-    Starstalk.prototype.bindEvents = function() {
-      var _this = this;
-      $(window).on('resize', function(e) {
-        var $body;
-        $body = $('body');
-        return _this.$canvas.attr({
-          width: $body.width(),
-          height: $body.height()
-        });
-      });
-      $(document).on('keypress', function(e) {
-        switch (e.charCode) {
-          case 32:
-            return _this.togglePause();
-          case 70 | 102:
-            _this.canvas.webkitRequestFullScreen();
-            return _this.canvas.mozRequestFullScreen();
-        }
-      });
-      $(this.canvas).on('mousemove', function(e) {
-        _this.mouse.x = e.offsetX || e.layerX;
-        return _this.mouse.y = e.offsetY || e.layerY;
-      });
-      $(this.canvas).on('mousedown', function(e) {
-        var branch, _i, _len, _ref, _results;
-        if (e.which === 1) {
-          return _this.mouseDown = true;
-        } else if (e.which === 3) {
-          _ref = Branch.growing();
-          _results = [];
-          for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-            branch = _ref[_i];
-            if (branch.status.distanceTravelled > Config.branchDistanceMin) {
-              _results.push(branch.doFork());
-            } else {
-              _results.push(void 0);
-            }
-          }
-          return _results;
-        }
-      });
-      $(this.canvas).on('mouseup', function(e) {
-        if (e.which === 1) {
-          return _this.mouseDown = false;
-        }
-      });
-      $(this.canvas).on('contextmenu', function(e) {
-        return e.preventDefault();
-      });
-      return $(document).on('keydown', function(e) {});
-    };
-
-    Starstalk.prototype.unbindEvents = function() {
-      $(window).off('resize');
-      $(document).off('keypress keydown');
-      return $(this.canvas).off('mousemove mousedown mouseup contextmenu');
-    };
-
-    Starstalk.prototype.showGameOver = function() {
-      var _this = this;
-      this.status.gameOver = true;
-      return $(this.canvas).on('mousedown', function(e) {
-        return newGame();
-      });
-    };
-
-    Starstalk.prototype.startTasks = function() {};
-
-    Starstalk.prototype.pruneTree = function() {
-      var cloud, height, left, obj, r, rejected, rejectedStars, top, width, _i, _j, _len, _len1, _ref, _ref1;
-      _ref = game.view.worldBounds(), left = _ref.left, top = _ref.top, width = _ref.width, height = _ref.height;
-      rejected = quadtree.prune(left, top, width, height);
-      for (_i = 0, _len = rejected.length; _i < _len; _i++) {
-        r = rejected[_i];
-        obj = r.object;
-        if (obj instanceof Star) {
-          obj.branch.doStop();
-        } else if (obj instanceof Cloud) {
-          _ref1 = game.clouds;
-          for (cloud = _j = 0, _len1 = _ref1.length; _j < _len1; cloud = ++_j) {
-            i = _ref1[cloud];
-            if (obj === cloud) {
-              game.clouds.splice(i, 1);
-              console.log('killed cloud');
-            }
-          }
-        }
-      }
-      return rejectedStars = rejected.filter(function(r) {
-        return r instanceof Star;
-      });
-    };
-
-    return Starstalk;
-
-  })();
-
-  newGame = function() {
-    if (game != null) {
-      game.unbindEvents();
-      clearInterval(game.loopInterval);
-    }
-    game = new Starstalk({
-      $canvas: $('#game')
-    });
-    GFX = game.GFX;
-    world = game.world;
-    return game.start();
-  };
+  })(GameState);
 
   $(function() {
-    var $body;
-    $body = $('body');
-    return newGame();
+    var states;
+    states = {
+      play: new PlayState
+    };
+    game = new GameEngine({
+      canvas: $('#game').get(0),
+      initialState: states.play,
+      fps: 30
+    });
+    return game.start();
   });
 
 }).call(this);
