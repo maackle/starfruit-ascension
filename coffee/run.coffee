@@ -4,26 +4,6 @@
 class GameOverState extends GameState
 
 
-class PlayState extends GameState
-
-	view: null
-
-	constructor: ->
-
-
-	enter: ->
-		console.log @game
-		@view = new Viewport @game.canvas,
-			anchor: 'center'
-
-	exit: ->
-
-	update: (dt) ->
-
-	render: (dt) ->
-		@view.clearScreen('blue')
-
-		
 $ ->
 	states =
 		play: new PlayState

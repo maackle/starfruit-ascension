@@ -1,32 +1,27 @@
 
-class Quad
-
-	x: null
-	y: null
-	w: null
-	h: null
-
-	constructor: ->
-		if arguments.length == 4  # x, y, w, h
-			[@x, @y, @w, @h] = arguments
-		else throw 'unsupported Quad arguments'
-
-	width: -> w
-	height: -> h
-
-
 class Viewport
 	
 	constructor: (@canvas, opts) ->
 		{@anchor, @scroll, @scale} = opts
+		@anchor ?= {}
+		@scroll ?= new Vec 0, 0
 		@scale ?= 1
 		@ctx = @canvas.getContext '2d'
 		[w, h] = [@canvas.width, @canvas.height]
 		@offset = [w/2, h/2]
+
+	draw: (fn) ->
+		@ctx.save()
+		@resetTransform()
+		fn(@ctx)
+		@ctx.restore()
 	
 	resetTransform: ->
 		[w, h] = [@canvas.width, @canvas.height]
-		@offset = [w/2, h/2]
+		if @anchor == 'center'
+			@offset = [w/2, h/2]
+		else
+			@offset = [0, 0]
 		if @anchor.top?
 			@offset[1] = @anchor.top
 		if @anchor.right?
@@ -79,6 +74,7 @@ class Viewport
 
 class GameState
 
+	_timesPushed: 0
 	_boundEvents: []
 
 	game: null  # this is set when being pushed onto a GameEngine and cleared when being popped
@@ -97,7 +93,7 @@ class GameState
 			[what, events, fn] = e
 			$(what).off events
 
-	enter: ->  # called when state is pushed on top
+	enter: (info) ->  # called when state is pushed on top
 
 	exit: ->  # called when state is popped
 
@@ -137,6 +133,7 @@ class GameEngine
 
 	stop: ->
 		clearInterval @intervals.gameLoop
+		@intervals.gameLoop = null
 
 	currentState: -> 
 		@states[@states.length - 1]
@@ -162,12 +159,17 @@ class GameEngine
 		state.update(dt)
 		state.render()
 
-	_bindEvents: ->
+	togglePanic: ->
+		if @intervals.gameLoop?
+			@stop()
+		else
+			@start()
 
+	_bindEvents: ->
 		$(document).on 'keypress', (e) =>
 			switch e.charCode
 				when 32
-					@togglePause()
+					@togglePanic()
 				when 70 | 102
 					@canvas.webkitRequestFullScreen()
 					@canvas.mozRequestFullScreen()

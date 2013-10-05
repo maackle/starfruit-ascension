@@ -13,7 +13,7 @@ Config =
 	starThrustRate: 18 			# speed while left mousedown
 
 	autoFork: true 				# form after branchDistanceMax
-	debugDraw: true 			# draw AABBs around Collidables
+	debugDraw: false 			# draw AABBs around Collidables
 
 	branchAngle: Math.PI / 3 	# deviation from path, radians
 	branchAngleUpwardWeight: 0.1 # add a small component of upwards direction
@@ -56,12 +56,12 @@ Config =
 	starNovaTime: 1.5 				# unused, time to animate star death in seconds
 	starSafetyDistance: 128 		# how far a star can travel before it becomes collidable.  
 									#	 used to prevent immediate annihilation of new branches
-	images:
-		star: new ImageResource 'img/star-32.png'
-		cloud: new ImageResource 'img/cloud-4-a.png'
-		balloon: new ImageResource 'img/balloon.png'
-		satellite: new ImageResource 'img/satellite.png'
-		cookie: new ImageResource 'img/cookie.png'
+
+	starImage: makeImage 'img/star-32.png'
+	cloudImage: makeImage 'img/cloud-4-a.png'
+	balloonImage: makeImage 'img/balloon.png'
+	satelliteImage: makeImage 'img/satellite.png'
+	cookieImage: makeImage 'img/cookie.png'
 
 	starOffset:
 		x: 16

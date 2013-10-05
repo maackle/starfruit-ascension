@@ -6,11 +6,6 @@ NotImplemented = {
 
 }
 
-M.context = (ctx, fn) ->
-	ctx.save()
-	fn(ctx)
-	ctx.restore()
-
 class Module
 
 	@__keywords: ['extended']
@@ -63,42 +58,23 @@ class Vec
 Vec.zero = Vec.immutable 0, 0
 Vec.one = Vec.immutable 1, 1
 
-
-class Quad
-
-	x: null
-	y: null
-	w: null
-	h: null
-
-	constructor: ->
-		if arguments.length == 4  # x, y, w, h
-			[@x, @y, @w, @h] = arguments
-		else throw 'unsupported Quad arguments'
-
-	width: -> w
-	height: -> h
-
-
-class ImageResource
+class M.Image
 
 	@_cache: {}
-	image: null
 	loaded: false
 
 	constructor: (o) ->
-		console.assert o?
 		if o instanceof Image
 			im = o
 		else
-			hit = ImageResource._cache[o]?
+			hit = M.Image._cache[o]?
 			if hit
 				im = hit
 			else
 				im = new Image
 				im.src = o
 				im.onload = => @loaded = true
-				ImageResource._cache[0] = im
+				M.image._cache[0] = im
 		@image = im
 
 class Sprite
@@ -242,22 +218,22 @@ GFX =
 
 
 
-# class ModuleOriginal
+class ModuleOriginal
 
-# 	@__keywords: ['extended', 'included']
+	@__keywords: ['extended', 'included']
 
-# 	# from http://arcturo.github.io/library/coffeescript/03_classes.html
-# 	@extend: (obj) ->
-# 		for key, value of obj when key not in Moduler.__keywords
-# 			@[key] = value
+	# from http://arcturo.github.io/library/coffeescript/03_classes.html
+	@extend: (obj) ->
+		for key, value of obj when key not in Moduler.__keywords
+			@[key] = value
 
-# 		obj.extended?.apply(@)
-# 		this
+		obj.extended?.apply(@)
+		this
 
-# 	@include: (obj) ->
-# 		for key, value of obj when key not in Moduler.__keywords
-# 			# Assign properties to the prototype
-# 			@::[key] = value
+	@include: (obj) ->
+		for key, value of obj when key not in Moduler.__keywords
+			# Assign properties to the prototype
+			@::[key] = value
 
-# 		obj.included?.apply(@)
-# 		this
+		obj.included?.apply(@)
+		this

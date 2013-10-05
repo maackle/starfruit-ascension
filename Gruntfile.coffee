@@ -28,13 +28,15 @@ module.exports = (grunt) ->
                 join: true
             compile:
                 files:
-                    "<%= config.dist %>/starstalk.js": [
+                    "<%= config.dist %>/starfruit.js": [
                         "<%= config.app %>/coffee/util.coffee",
-                        "<%= config.app %>/coffee/config.coffee",
                         "<%= config.app %>/coffee/classes.coffee",
                         "<%= config.app %>/coffee/mixins.coffee",
                         "<%= config.app %>/coffee/engine.coffee",
-                        "<%= config.app %>/coffee/game.coffee",
+                        "<%= config.app %>/coffee/config.coffee",
+                        # "<%= config.app %>/coffee/game.coffee",
+                        "<%= config.app %>/coffee/obstacles.coffee",
+                        "<%= config.app %>/coffee/play.coffee",
                         "<%= config.app %>/coffee/run.coffee",
                     ] # // compile and concat into single file
 
