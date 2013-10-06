@@ -1,3 +1,5 @@
+globals = {}
+
 atmoscale = 1.0/2.0
 Atmosphere = 
 	noflyzone: 5000 * atmoscale

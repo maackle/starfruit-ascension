@@ -1,4 +1,3 @@
-globals = {}
 
 class PlayState extends GameState
 
@@ -15,9 +14,11 @@ class PlayState extends GameState
 	stars: []
 
 	constructor: ->
-		globals.quadtree = @quadtree
 		numRainbowColors = 256
 		@rainbowColors = (tinycolor("hsv(#{p * 100 / numRainbowColors}%, 50%, 100%)").toRgbString() for p in [0..numRainbowColors])
+		@initialize()
+
+	initialize: ->
 		@obstacles.push new Cookie(new Vec(0,0), new Vec(1, 0))
 		@obstacles.push new Satellite(new Vec(-100,0), new Vec(1, 0))
 		@obstacles.push new Cloud(new Vec(-100,-100), new Vec(1, 0))
@@ -58,3 +59,8 @@ class PlayState extends GameState
 			ctx.setTransform(1, 0, 0, 1, 0, 0)
 			ctx.fillText(parseInt(@heightAchieved) + 'm', 50, 100)
 			ctx.strokeText(parseInt(@heightAchieved) + 'm', 50, 100)
+
+
+
+
+class GameOverState extends GameState

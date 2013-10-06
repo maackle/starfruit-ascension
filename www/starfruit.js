@@ -355,6 +355,39 @@
     })();
   })();
 
+  Sprite = (function() {
+    Sprite.prototype.offset = null;
+
+    Sprite.prototype.image = null;
+
+    function Sprite(_arg) {
+      this.image = _arg.image, this.offset = _arg.offset;
+    }
+
+    Sprite.prototype.draw = function(transform) {
+      var _this = this;
+      return function(ctx) {
+        var position, rotation, scale;
+        position = transform.position, rotation = transform.rotation, scale = transform.scale;
+        ctx.save();
+        if (position != null) {
+          ctx.translate(position.x, position.y);
+        }
+        if (rotation != null) {
+          ctx.rotate(rotation);
+        }
+        if (scale != null) {
+          ctx.scale(scale);
+        }
+        ctx.drawImage(_this.image.image, -_this.offset.x, -_this.offset.y);
+        return ctx.restore();
+      };
+    };
+
+    return Sprite;
+
+  })();
+
   Viewport = (function() {
     function Viewport(canvas, opts) {
       var h, w, _ref;
@@ -635,6 +668,8 @@
 
   })();
 
+  globals = {};
+
   atmoscale = 1.0 / 2.0;
 
   Atmosphere = {
@@ -728,6 +763,36 @@
     }
   };
 
+  Thing = (function() {
+    function Thing() {}
+
+    Thing.prototype.angle = 0.0;
+
+    Thing.prototype.scale = 1.0;
+
+    Thing.prototype.position = null;
+
+    Thing.prototype.render = function() {
+      throw NotImplemented;
+    };
+
+    Thing.prototype.update = function() {
+      throw NotImplemented;
+    };
+
+    Thing.prototype.withTransform = function(fn) {
+      game.ctx.save();
+      game.ctx.translate(this.position.x, this.position.y);
+      game.ctx.rotate(this.angle);
+      game.ctx.scale(this.scale, this.scale);
+      fn();
+      return game.ctx.restore();
+    };
+
+    return Thing;
+
+  })();
+
   QuadtreeBox = (function() {
     QuadtreeBox.prototype.left = null;
 
@@ -761,40 +826,9 @@
 
   })();
 
-  Sprite = (function() {
-    Sprite.prototype.offset = null;
+  Obstacle = (function(_super) {
+    __extends(Obstacle, _super);
 
-    Sprite.prototype.image = null;
-
-    function Sprite(_arg) {
-      this.image = _arg.image, this.offset = _arg.offset;
-    }
-
-    Sprite.prototype.draw = function(transform) {
-      var _this = this;
-      return function(ctx) {
-        var position, rotation, scale;
-        position = transform.position, rotation = transform.rotation, scale = transform.scale;
-        ctx.save();
-        if (position != null) {
-          ctx.translate(position.x, position.y);
-        }
-        if (rotation != null) {
-          ctx.rotate(rotation);
-        }
-        if (scale != null) {
-          ctx.scale(scale);
-        }
-        ctx.drawImage(_this.image.image, -_this.offset.x, -_this.offset.y);
-        return ctx.restore();
-      };
-    };
-
-    return Sprite;
-
-  })();
-
-  Obstacle = (function() {
     function Obstacle(position, velocity) {
       this.position = position;
       this.velocity = velocity;
@@ -812,18 +846,18 @@
 
     return Obstacle;
 
-  })();
+  })(Thing);
 
   Balloon = (function(_super) {
     __extends(Balloon, _super);
 
-    Balloon.prototype.angAccel = 0.003;
+    Balloon.prototype.angAccel = 0.001;
 
     function Balloon() {
       var dim, topdim;
       Balloon.__super__.constructor.apply(this, arguments);
       this.angle = Math.random() * Math.PI / 4;
-      this.angVel = Math.random() * 0.05;
+      this.angVel = Math.random() * 0.02;
       this.sprite = new Sprite({
         image: Config.images.balloon,
         offset: new Vec(44, 62)
@@ -954,8 +988,6 @@
 
   })(Obstacle);
 
-  globals = {};
-
   PlayState = (function(_super) {
     __extends(PlayState, _super);
 
@@ -979,7 +1011,6 @@
 
     function PlayState() {
       var numRainbowColors, p;
-      globals.quadtree = this.quadtree;
       numRainbowColors = 256;
       this.rainbowColors = (function() {
         var _i, _results;
@@ -989,11 +1020,15 @@
         }
         return _results;
       })();
+      this.initialize();
+    }
+
+    PlayState.prototype.initialize = function() {
       this.obstacles.push(new Cookie(new Vec(0, 0), new Vec(1, 0)));
       this.obstacles.push(new Satellite(new Vec(-100, 0), new Vec(1, 0)));
       this.obstacles.push(new Cloud(new Vec(-100, -100), new Vec(1, 0)));
-      this.obstacles.push(new Balloon(new Vec(-100, -100), new Vec(1, 0)));
-    }
+      return this.obstacles.push(new Balloon(new Vec(-100, -100), new Vec(1, 0)));
+    };
 
     PlayState.prototype.enter = function() {
       if (this.view == null) {
@@ -1076,6 +1111,7 @@
     states = {
       play: new PlayState
     };
+    globals.quadtree = states.play.quadtree;
     game = new GameEngine({
       canvas: $('#game').get(0),
       initialState: states.play,

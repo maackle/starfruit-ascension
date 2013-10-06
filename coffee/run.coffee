@@ -1,13 +1,12 @@
 
 
 
-class GameOverState extends GameState
-
 
 $ ->
 	states =
 		play: new PlayState
 
+	globals.quadtree = states.play.quadtree  # TODO: no globals
 
 	game = new GameEngine
 		canvas: $('#game').get(0)

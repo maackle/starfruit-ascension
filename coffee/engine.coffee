@@ -1,4 +1,22 @@
 
+
+class Sprite
+
+	offset: null
+	image: null
+
+	constructor: ({@image, @offset}) ->
+
+	draw: (transform) -> (ctx) =>
+		{position, rotation, scale} = transform
+		ctx.save()
+		ctx.translate position.x, position.y if position?
+		ctx.rotate rotation if rotation?
+		ctx.scale scale if scale?
+		ctx.drawImage @image.image, - @offset.x, - @offset.y
+		ctx.restore()
+
+
 class Viewport
 	
 	constructor: (@canvas, opts) ->

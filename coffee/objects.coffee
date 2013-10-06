@@ -1,6 +1,25 @@
 
 
 
+class Thing
+
+	angle: 0.0
+	scale: 1.0
+	position: null
+
+	render: -> throw NotImplemented
+	update: -> throw NotImplemented
+	
+	withTransform: (fn) ->
+		game.ctx.save()
+		game.ctx.translate @position.x, @position.y  # offset correction happens when drawing the sprite.
+		game.ctx.rotate @angle
+		game.ctx.scale @scale, @scale
+		# game.ctx.translate -@offset.x, -@offset.y
+		fn()
+		game.ctx.restore()
+
+
 class QuadtreeBox
 
 	left: null
@@ -35,24 +54,11 @@ class QuadtreeBox
 # 			quadtree.insert @qbox
 
 
-class Sprite
-
-	offset: null
-	image: null
-
-	constructor: ({@image, @offset}) ->
-
-	draw: (transform) -> (ctx) =>
-		{position, rotation, scale} = transform
-		ctx.save()
-		ctx.translate position.x, position.y if position?
-		ctx.rotate rotation if rotation?
-		ctx.scale scale if scale?
-		ctx.drawImage @image.image, - @offset.x, - @offset.y
-		ctx.restore()
 
 
-class Obstacle
+
+
+class Obstacle extends Thing
 
 	constructor: (@position, @velocity) ->
 		@velocity ?= new Vec 0, 0
@@ -66,12 +72,12 @@ class Obstacle
 
 class Balloon extends Obstacle
 
-	angAccel: 0.003
+	angAccel: 0.001
 
 	constructor: ->
 		super
 		@angle = Math.random() * Math.PI / 4
-		@angVel = Math.random() * 0.05
+		@angVel = Math.random() * 0.02
 		@sprite = new Sprite
 			image: Config.images.balloon
 			offset: new Vec 44, 62
