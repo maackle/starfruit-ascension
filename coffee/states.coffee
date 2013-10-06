@@ -1,7 +1,7 @@
 
 class PlayState extends GameState
 
-	tailColorIndex: 0
+	highestStar: null
 	heightAchieved: 0
 
 	view: null
@@ -12,6 +12,7 @@ class PlayState extends GameState
 	clouds: []
 	novae: []
 	stars: []
+	branches: []
 
 	constructor: ->
 		numRainbowColors = 256
@@ -23,6 +24,11 @@ class PlayState extends GameState
 		@obstacles.push new Satellite(new Vec(-100,0), new Vec(1, 0))
 		@obstacles.push new Cloud(new Vec(-100,-100), new Vec(1, 0))
 		@obstacles.push new Balloon(new Vec(-100,-100), new Vec(1, 0))
+		star = new Star(new Vec 0, 0)
+		@stars.push star
+		branch = new Branch(new Vec 0, 0)
+		branch.setStar(star)
+		@branches.push branch
 
 	enter: ->
 		@view ?= new Viewport @game.canvas,
@@ -35,13 +41,39 @@ class PlayState extends GameState
 
 	update: (dt) ->
 		@quadtree.reset()
-		updateables = @novae.concat @obstacles.concat @clouds.concat @stars
-		d.update(dt) for d in updateables
+		t.update(dt) for t in @novae
+		t.update(dt) for t in @obstacles
+		t.update(dt) for t in @clouds
+		
+		for star in @stars
+			star.update(dt)
+			branch = star.branch
+			if Config.autoFork and branch.forkable()
+				left = new Branch branch
+				right = new Branch branch
+				newStar = new Star new Vec branch.tip
+				left.setStar newStar
+				right.setStar star
+				newStar.angle -= Config.branchAngle
+				star.angle += Config.branchAngle
+				@stars.push newStar
+				console.log branch.knots, left.knots, right.knots
+				@branches = @collectBranches()
+
+		for branch in @branches
+			branch.update(dt)
+
+		@highestStar = _.min @stars, (s) -> s.position.y
+		
+		[w, h] = @view.dimensions()
+		@heightAchieved = -@highestStar.position.y if -@highestStar.position.y > @heightAchieved
+		@view.scroll.y = Math.max 0, @heightAchieved
+
 
 	render: ->
 		@view.clearScreen('blue')
 		@view.draw (ctx) =>
-			renderables = @novae.concat @obstacles.concat @clouds.concat @stars
+			renderables = @novae.concat @obstacles.concat @clouds.concat @stars.concat @branches
 			r.render(ctx) for r in renderables
 
 			if Config.debugDraw
@@ -60,6 +92,20 @@ class PlayState extends GameState
 			ctx.fillText(parseInt(@heightAchieved) + 'm', 50, 100)
 			ctx.strokeText(parseInt(@heightAchieved) + 'm', 50, 100)
 
+	collectBranches: ->
+		visited = []
+
+		level = (branches) ->
+			if branches.length == 0
+				[]
+			else
+				parents = []
+				parents.push branch.parent for branch in branches when branch.parent not in visited
+				branches.concat level(_.compact(parents))
+
+		leaves = (star.branch for star in @stars)
+		branches = level(leaves)
+		branches
 
 
 

@@ -1,5 +1,5 @@
 (function() {
-  var Atmosphere, Balloon, Cloud, Config, Cookie, GFX, GameEngine, GameOverState, GameState, ImageResource, M, Module, NotImplemented, Obstacle, PlayState, Quad, QuadtreeBox, Satellite, Sprite, Thing, Vec, Viewport, atmoscale, clampAngleSigned, globals, lerp, makeImage, withImage, withImages, _ref,
+  var Atmosphere, Balloon, Branch, Cloud, Collidable, Config, Cookie, GFX, GameEngine, GameOverState, GameState, ImageResource, M, Module, NotImplemented, Obstacle, PlayState, Quad, QuadtreeBox, Satellite, Sprite, Star, Thing, Vec, Viewport, atmoscale, clampAngleSigned, globals, i, lerp, makeImage, withImage, withImages, _ref, _ref1,
     __slice = [].slice,
     __indexOf = [].indexOf || function(item) { for (var i = 0, l = this.length; i < l; i++) { if (i in this && this[i] === item) return i; } return -1; },
     __hasProp = {}.hasOwnProperty,
@@ -495,22 +495,30 @@
   })();
 
   GameState = (function() {
-    function GameState() {}
-
     GameState.prototype._timesPushed = 0;
 
-    GameState.prototype._boundEvents = [];
+    GameState.prototype._boundEvents = null;
 
     GameState.prototype.game = null;
 
     GameState.prototype.parent = null;
 
+    function GameState() {
+      this._boundEvents = [];
+    }
+
     GameState.prototype.bind = function(what, events, fn) {
+      if (this._boundEvents == null) {
+        this._boundEvents = [];
+      }
       return this._boundEvents.push([what, events, fn]);
     };
 
     GameState.prototype._bindEvents = function() {
       var e, events, fn, what, _i, _len, _ref, _results;
+      if (this._boundEvents == null) {
+        this._boundEvents = [];
+      }
       _ref = this._boundEvents;
       _results = [];
       for (_i = 0, _len = _ref.length; _i < _len; _i++) {
@@ -548,11 +556,11 @@
   GameEngine = (function() {
     GameEngine.prototype.canvas = null;
 
-    GameEngine.prototype.mouse = new Vec(0, 0);
+    GameEngine.prototype.mouse = null;
 
-    GameEngine.prototype.config = {};
+    GameEngine.prototype.config = null;
 
-    GameEngine.prototype.states = [];
+    GameEngine.prototype.states = null;
 
     GameEngine.prototype.intervals = {
       gameLoop: null
@@ -560,10 +568,13 @@
 
     function GameEngine(opts) {
       var _ref;
+      this.states = [];
+      this.mouse = new Vec(0, 0);
       this.config = _.defaults(opts, {
         fps: 30,
         fullscreen: true
       });
+      this.preUpdate = opts.preUpdate, this.postUpdate = opts.postUpdate, this.preRender = opts.preRender, this.postRender = opts.postRender;
       this.canvas = (function() {
         if ((_ref = opts.canvas) != null) {
           return _ref;
@@ -619,8 +630,18 @@
       if (!state instanceof GameState) {
         throw 'not a state';
       }
+      if (typeof this.preUpdate === "function") {
+        this.preUpdate();
+      }
       state.update(dt);
-      return state.render();
+      if (typeof this.postUpdate === "function") {
+        this.postUpdate();
+      }
+      if (typeof this.preRender === "function") {
+        this.preRender();
+      }
+      state.render();
+      return typeof this.postRender === "function" ? this.postRender() : void 0;
     };
 
     GameEngine.prototype.togglePanic = function() {
@@ -683,21 +704,26 @@
   Config = {
     mainFont: 'Monoton',
     hudFont: 'Offside',
-    growthRate: 15,
-    starThrustRate: 18,
-    autoFork: true,
     debugDraw: true,
+    starSpeed: 15,
+    starHyperSpeed: 18,
+    autoFork: true,
     branchAngle: Math.PI / 3,
     branchAngleUpwardWeight: 0.1,
-    branchDistanceMin: 1500,
-    branchDistanceMax: 3000,
+    branchDistanceMin: 100,
+    branchDistanceMax: 300,
     branchFibers: 3,
     branchWidth: 10,
+    knotSpacing: 100,
+    knotSpacingWhileThrusting: 50,
+    knotAngleJitter: Math.PI / 24,
+    starRadius: 16,
+    starInnerRadius: 8,
+    starNovaRadius: 32,
+    starNovaTime: 1.5,
+    starSafetyDistance: 128,
     autokillDistanceRatio: 1.25,
     autokillOffscreenX: 600,
-    knotDistance: 100,
-    knotDistanceWhileThrusting: 50,
-    knotAngleJitter: Math.PI / 24,
     probability: {
       cloud: function(height) {
         if (height < Atmosphere.noflyzone) {
@@ -744,19 +770,12 @@
         }
       }
     },
-    starNovaRadius: 32,
-    starNovaTime: 1.5,
-    starSafetyDistance: 128,
     images: {
       star: new ImageResource('img/star-32.png'),
       cloud: new ImageResource('img/cloud-4-a.png'),
       balloon: new ImageResource('img/balloon.png'),
       satellite: new ImageResource('img/satellite.png'),
       cookie: new ImageResource('img/cookie.png')
-    },
-    starOffset: {
-      x: 16,
-      y: 16
     },
     atmosphere: {
       layers: [[atmoscale * 0, tinycolor('#b5e0e2'), 1], [Atmosphere.noflyzone, tinycolor('#b5e0e2'), 1], [Atmosphere.tropopause, tinycolor('#97b2c6'), 0.95], [Atmosphere.stratopause, tinycolor('#778b9b'), 0.9], [Atmosphere.mesopause, tinycolor('#37475b'), 0.7], [Atmosphere.exopause, tinycolor('#0f1419'), 0.0]]
@@ -780,13 +799,13 @@
       throw NotImplemented;
     };
 
-    Thing.prototype.withTransform = function(fn) {
-      game.ctx.save();
-      game.ctx.translate(this.position.x, this.position.y);
-      game.ctx.rotate(this.angle);
-      game.ctx.scale(this.scale, this.scale);
+    Thing.prototype.withTransform = function(ctx, fn) {
+      ctx.save();
+      ctx.translate(this.position.x, this.position.y);
+      ctx.rotate(this.angle);
+      ctx.scale(this.scale, this.scale);
       fn();
-      return game.ctx.restore();
+      return ctx.restore();
     };
 
     return Thing;
@@ -802,7 +821,7 @@
 
     QuadtreeBox.prototype.offset = null;
 
-    QuadtreeBox.prototype.dimensions = [];
+    QuadtreeBox.prototype.dimensions = null;
 
     function QuadtreeBox(_arg) {
       this.position = _arg.position, this.offset = _arg.offset, this.dimensions = _arg.dimensions, this.object = _arg.object;
@@ -826,6 +845,204 @@
 
   })();
 
+  Collidable = (function(_super) {
+    __extends(Collidable, _super);
+
+    function Collidable() {
+      _ref = Collidable.__super__.constructor.apply(this, arguments);
+      return _ref;
+    }
+
+    Collidable.prototype.qbox = null;
+
+    Collidable.prototype.isActiveCollider = true;
+
+    Collidable.prototype.update = function() {
+      this.qbox.update();
+      if (this.isActiveCollider) {
+        return globals.quadtree.insert(this.qbox);
+      }
+    };
+
+    return Collidable;
+
+  })(Thing);
+
+  Star = (function(_super) {
+    __extends(Star, _super);
+
+    Star.nextID = 1;
+
+    Star.prototype.id = null;
+
+    Star.prototype.branch = null;
+
+    Star.prototype.angle = -Math.PI / 2 + 0.1;
+
+    function Star(position) {
+      this.position = position;
+      this.id = Star.nextID++;
+      this.qbox = new QuadtreeBox({
+        position: this.position,
+        dimensions: [Star.radius * 2, Star.radius * 2],
+        offset: new Vec(Star.radius, Star.radius),
+        object: this
+      });
+    }
+
+    Star.prototype.attraction = function() {
+      return null;
+    };
+
+    Star.prototype.speed = function() {
+      return Config.starSpeed;
+    };
+
+    Star.prototype.velocity = function() {
+      return Vec.polar(this.speed(), this.angle);
+    };
+
+    Star.prototype.isSafe = function() {
+      return this.branch.distanceTravelled < Config.starSafetyDistance;
+    };
+
+    Star.prototype.update = function() {
+      var a, da, diff;
+      if (this.attraction()) {
+        diff = new Vec(this.attraction());
+        diff.sub(this.position);
+        a = clampAngleSigned(this.angle);
+        da = clampAngleSigned(diff.angle() - a);
+        this.angle = lerp(0, da, 0.1) + a;
+      }
+      this.position.add(this.velocity());
+      return Star.__super__.update.apply(this, arguments);
+    };
+
+    Star.prototype.render = function(ctx) {
+      var _this = this;
+      return this.withTransform(ctx, function() {
+        ctx.beginPath();
+        GFX.drawLineString(ctx, Star.vertices);
+        if (_this.isSafe()) {
+          ctx.strokeStyle = rainbow(3);
+          ctx.fillStyle = rainbow(12);
+        } else {
+          ctx.strokeStyle = rainbow();
+          ctx.fillStyle = 'white';
+        }
+        ctx.lineWidth = 2;
+        ctx.fill();
+        return ctx.stroke();
+      });
+    };
+
+    return Star;
+
+  })(Collidable);
+
+  Star.radius = Config.starRadius;
+
+  Star.radius2 = Config.starInnerRadius;
+
+  Star.vertices = (function() {
+    var _i, _results;
+    _results = [];
+    for (i = _i = 0; _i <= 10; i = ++_i) {
+      _results.push(Vec.polar((i % 2 === 0 ? Star.radius : Star.radius2), i * (Math.PI * 2 / 10)));
+    }
+    return _results;
+  })();
+
+  Branch = (function(_super) {
+    __extends(Branch, _super);
+
+    Branch.nextID = 1;
+
+    Branch.prototype.highestAltitude = 0;
+
+    Branch.prototype.forkDistance = Config.branchDistanceMax;
+
+    Branch.prototype.knotSpacing = Config.knotSpacing;
+
+    Branch.prototype.distanceTravelled = 0;
+
+    Branch.prototype.lastKnotDistance = 0;
+
+    Branch.prototype.root = null;
+
+    Branch.prototype.star = null;
+
+    Branch.prototype.tip = null;
+
+    Branch.prototype.knots = null;
+
+    Branch.prototype.isGrowing = function() {
+      return this.star != null;
+    };
+
+    function Branch(parent) {
+      this.parent = parent;
+      this.id = Branch.nextID++;
+      if (this.parent instanceof Branch) {
+        this.root = new Vec(this.parent.tip);
+      } else {
+        this.root = new Vec(this.parent);
+        this.parent = null;
+      }
+      this.tip = new Vec(this.root);
+      this.knots = [];
+      this.doKnot();
+    }
+
+    Branch.prototype.setStar = function(star) {
+      var _ref1;
+      if ((_ref1 = star.branch) != null) {
+        _ref1.star = null;
+      }
+      star.branch = this;
+      this.star = star;
+      return this.tip = this.star.position;
+    };
+
+    Branch.prototype.update = function(dt) {
+      if (this.star != null) {
+        this.distanceTravelled += this.star.velocity().length();
+        if (this.distanceTravelled - this.lastKnotDistance > this.knotSpacing) {
+          this.doKnot();
+        }
+        if (this.markForNoGrow) {
+          this.markForNoGrow = false;
+          return this.star = null;
+        }
+      }
+    };
+
+    Branch.prototype.render = function(ctx) {
+      ctx.beginPath();
+      GFX.drawLineString(ctx, this.knots, this.tip);
+      ctx.strokeStyle = "rgb(0, " + (this.id * 64) + ", 0)";
+      ctx.fillStyle = rainbow();
+      return ctx.stroke();
+    };
+
+    Branch.prototype.doKnot = function() {
+      this.knots.push(new Vec(this.tip));
+      this.angle += (Math.random() - 0.5) * Config.knotAngleJitter;
+      this.lastKnotDistance = this.distanceTravelled;
+      if (-this.tip.y > this.highestAltitude) {
+        return this.highestAltitude = -this.tip.y;
+      }
+    };
+
+    Branch.prototype.forkable = function() {
+      return this.distanceTravelled > this.forkDistance;
+    };
+
+    return Branch;
+
+  })(Thing);
+
   Obstacle = (function(_super) {
     __extends(Obstacle, _super);
 
@@ -840,13 +1057,12 @@
 
     Obstacle.prototype.update = function() {
       this.position.add(this.velocity);
-      this.qbox.update();
-      return globals.quadtree.insert(this.qbox);
+      return Obstacle.__super__.update.apply(this, arguments);
     };
 
     return Obstacle;
 
-  })(Thing);
+  })(Collidable);
 
   Balloon = (function(_super) {
     __extends(Balloon, _super);
@@ -991,7 +1207,7 @@
   PlayState = (function(_super) {
     __extends(PlayState, _super);
 
-    PlayState.prototype.tailColorIndex = 0;
+    PlayState.prototype.highestStar = null;
 
     PlayState.prototype.heightAchieved = 0;
 
@@ -1009,6 +1225,8 @@
 
     PlayState.prototype.stars = [];
 
+    PlayState.prototype.branches = [];
+
     function PlayState() {
       var numRainbowColors, p;
       numRainbowColors = 256;
@@ -1024,10 +1242,16 @@
     }
 
     PlayState.prototype.initialize = function() {
+      var branch, star;
       this.obstacles.push(new Cookie(new Vec(0, 0), new Vec(1, 0)));
       this.obstacles.push(new Satellite(new Vec(-100, 0), new Vec(1, 0)));
       this.obstacles.push(new Cloud(new Vec(-100, -100), new Vec(1, 0)));
-      return this.obstacles.push(new Balloon(new Vec(-100, -100), new Vec(1, 0)));
+      this.obstacles.push(new Balloon(new Vec(-100, -100), new Vec(1, 0)));
+      star = new Star(new Vec(0, 0));
+      this.stars.push(star);
+      branch = new Branch(new Vec(0, 0));
+      branch.setStar(star);
+      return this.branches.push(branch);
     };
 
     PlayState.prototype.enter = function() {
@@ -1045,32 +1269,71 @@
     PlayState.prototype.exit = function() {};
 
     PlayState.prototype.update = function(dt) {
-      var d, updateables, _i, _len, _results;
+      var branch, h, left, newStar, right, star, t, w, _i, _j, _k, _l, _len, _len1, _len2, _len3, _len4, _m, _ref1, _ref2, _ref3, _ref4, _ref5, _ref6;
       this.quadtree.reset();
-      updateables = this.novae.concat(this.obstacles.concat(this.clouds.concat(this.stars)));
-      _results = [];
-      for (_i = 0, _len = updateables.length; _i < _len; _i++) {
-        d = updateables[_i];
-        _results.push(d.update(dt));
+      _ref1 = this.novae;
+      for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
+        t = _ref1[_i];
+        t.update(dt);
       }
-      return _results;
+      _ref2 = this.obstacles;
+      for (_j = 0, _len1 = _ref2.length; _j < _len1; _j++) {
+        t = _ref2[_j];
+        t.update(dt);
+      }
+      _ref3 = this.clouds;
+      for (_k = 0, _len2 = _ref3.length; _k < _len2; _k++) {
+        t = _ref3[_k];
+        t.update(dt);
+      }
+      _ref4 = this.stars;
+      for (_l = 0, _len3 = _ref4.length; _l < _len3; _l++) {
+        star = _ref4[_l];
+        star.update(dt);
+        branch = star.branch;
+        if (Config.autoFork && branch.forkable()) {
+          left = new Branch(branch);
+          right = new Branch(branch);
+          newStar = new Star(new Vec(branch.tip));
+          left.setStar(newStar);
+          right.setStar(star);
+          newStar.angle -= Config.branchAngle;
+          star.angle += Config.branchAngle;
+          this.stars.push(newStar);
+          console.log(branch.knots, left.knots, right.knots);
+          this.branches = this.collectBranches();
+        }
+      }
+      _ref5 = this.branches;
+      for (_m = 0, _len4 = _ref5.length; _m < _len4; _m++) {
+        branch = _ref5[_m];
+        branch.update(dt);
+      }
+      this.highestStar = _.min(this.stars, function(s) {
+        return s.position.y;
+      });
+      _ref6 = this.view.dimensions(), w = _ref6[0], h = _ref6[1];
+      if (-this.highestStar.position.y > this.heightAchieved) {
+        this.heightAchieved = -this.highestStar.position.y;
+      }
+      return this.view.scroll.y = Math.max(0, this.heightAchieved);
     };
 
     PlayState.prototype.render = function() {
       var _this = this;
       this.view.clearScreen('blue');
       this.view.draw(function(ctx) {
-        var box, r, renderables, _i, _j, _len, _len1, _ref, _results;
-        renderables = _this.novae.concat(_this.obstacles.concat(_this.clouds.concat(_this.stars)));
+        var box, r, renderables, _i, _j, _len, _len1, _ref1, _results;
+        renderables = _this.novae.concat(_this.obstacles.concat(_this.clouds.concat(_this.stars.concat(_this.branches))));
         for (_i = 0, _len = renderables.length; _i < _len; _i++) {
           r = renderables[_i];
           r.render(ctx);
         }
         if (Config.debugDraw) {
-          _ref = _this.quadtree.getObjects();
+          _ref1 = _this.quadtree.getObjects();
           _results = [];
-          for (_j = 0, _len1 = _ref.length; _j < _len1; _j++) {
-            box = _ref[_j];
+          for (_j = 0, _len1 = _ref1.length; _j < _len1; _j++) {
+            box = _ref1[_j];
             ctx.beginPath();
             ctx.rect(box.left, box.top, box.width, box.height);
             ctx.strokeStyle = 'red';
@@ -1090,6 +1353,38 @@
       });
     };
 
+    PlayState.prototype.collectBranches = function() {
+      var branches, leaves, level, star, visited;
+      visited = [];
+      level = function(branches) {
+        var branch, parents, _i, _len, _ref1;
+        if (branches.length === 0) {
+          return [];
+        } else {
+          parents = [];
+          for (_i = 0, _len = branches.length; _i < _len; _i++) {
+            branch = branches[_i];
+            if (_ref1 = branch.parent, __indexOf.call(visited, _ref1) < 0) {
+              parents.push(branch.parent);
+            }
+          }
+          return branches.concat(level(_.compact(parents)));
+        }
+      };
+      leaves = (function() {
+        var _i, _len, _ref1, _results;
+        _ref1 = this.stars;
+        _results = [];
+        for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
+          star = _ref1[_i];
+          _results.push(star.branch);
+        }
+        return _results;
+      }).call(this);
+      branches = level(leaves);
+      return branches;
+    };
+
     return PlayState;
 
   })(GameState);
@@ -1098,26 +1393,50 @@
     __extends(GameOverState, _super);
 
     function GameOverState() {
-      _ref = GameOverState.__super__.constructor.apply(this, arguments);
-      return _ref;
+      _ref1 = GameOverState.__super__.constructor.apply(this, arguments);
+      return _ref1;
     }
 
     return GameOverState;
 
   })(GameState);
 
+  (function() {
+    var numRainbowColors, p, rainbowColors;
+    globals.rainbowIndex = 0;
+    numRainbowColors = 256;
+    rainbowColors = (function() {
+      var _i, _results;
+      _results = [];
+      for (p = _i = 0; 0 <= numRainbowColors ? _i <= numRainbowColors : _i >= numRainbowColors; p = 0 <= numRainbowColors ? ++_i : --_i) {
+        _results.push(tinycolor("hsv(" + (p * 100 / numRainbowColors) + "%, 50%, 100%)").toRgbString());
+      }
+      return _results;
+    })();
+    return window.rainbow = function(factor) {
+      if (factor == null) {
+        factor = 1;
+      }
+      return rainbowColors[(globals.rainbowIndex * factor) % rainbowColors.length];
+    };
+  })();
+
   $(function() {
-    var game, states;
+    var Game, states;
     states = {
       play: new PlayState
     };
-    globals.quadtree = states.play.quadtree;
-    game = new GameEngine({
+    Game = new GameEngine({
       canvas: $('#game').get(0),
       initialState: states.play,
-      fps: 30
+      fps: 30,
+      preUpdate: function() {
+        return globals.rainbowIndex += 1;
+      }
     });
-    return game.start();
+    globals.quadtree = states.play.quadtree;
+    globals.rainbowIndex = 0;
+    return Game.start();
   });
 
 }).call(this);

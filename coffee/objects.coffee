@@ -10,14 +10,14 @@ class Thing
 	render: -> throw NotImplemented
 	update: -> throw NotImplemented
 	
-	withTransform: (fn) ->
-		game.ctx.save()
-		game.ctx.translate @position.x, @position.y  # offset correction happens when drawing the sprite.
-		game.ctx.rotate @angle
-		game.ctx.scale @scale, @scale
-		# game.ctx.translate -@offset.x, -@offset.y
+	withTransform: (ctx, fn) ->
+		ctx.save()
+		ctx.translate @position.x, @position.y  # offset correction happens when drawing the sprite.
+		ctx.rotate @angle
+		ctx.scale @scale, @scale
+		# ctx.translate -@offset.x, -@offset.y
 		fn()
-		game.ctx.restore()
+		ctx.restore()
 
 
 class QuadtreeBox
@@ -27,7 +27,7 @@ class QuadtreeBox
 
 	position: null  # Vec
 	offset: null  # Vec
-	dimensions: []
+	dimensions: null
 
 	constructor: ({@position, @offset, @dimensions, @object}) ->
 		@offset ?= Vec.zero
@@ -42,23 +42,135 @@ class QuadtreeBox
 		@height = h
 
 
-# class Collidable
+class Collidable extends Thing
 
-# 	qbox: null
-# 	isActiveCollider: true
+	qbox: null
+	isActiveCollider: true
 
-# 	update: ->
-# 		@qbox.left = @position.x - @offset.x
-# 		@qbox.top = @position.y - @offset.y
-# 		if @isActiveCollider
-# 			quadtree.insert @qbox
-
+	update: ->
+		@qbox.update()
+		if @isActiveCollider
+			globals.quadtree.insert @qbox
 
 
+class Star extends Collidable
+
+	@nextID: 1
+	id: null
+
+	branch: null
+	angle: -Math.PI / 2 + 0.1
+
+	constructor: (@position) ->
+		@id = Star.nextID++
+		@qbox = new QuadtreeBox
+			position: @position
+			dimensions: [Star.radius*2, Star.radius*2]
+			offset: new Vec Star.radius, Star.radius
+			object: this
+
+	attraction: -> null
+
+	speed: -> Config.starSpeed
+
+	velocity: -> Vec.polar @speed(), @angle
+
+	isSafe: -> @branch.distanceTravelled < Config.starSafetyDistance
+
+	update: ->
+		if @attraction()
+			diff = new Vec @attraction()
+			diff.sub @position
+			a = clampAngleSigned @angle
+			da = clampAngleSigned(diff.angle() - a)
+			@angle = lerp(0, da, 0.1) + a
+		# console.log 'befo', @position.x, @position.y
+		@position.add @velocity()
+		# console.log 'afta', @position.x, @position.y
+		super
+
+	render: (ctx) ->
+		@withTransform ctx, =>
+			ctx.beginPath()
+			GFX.drawLineString ctx, Star.vertices
+			if @isSafe()
+				ctx.strokeStyle = rainbow(3)
+				ctx.fillStyle = rainbow(12)
+			else
+				ctx.strokeStyle = rainbow()
+				ctx.fillStyle = 'white'
+			ctx.lineWidth = 2
+			ctx.fill()
+			ctx.stroke()
+
+Star.radius = Config.starRadius
+Star.radius2 = Config.starInnerRadius
+Star.vertices = (Vec.polar (if i % 2 == 0 then Star.radius else Star.radius2), i * (Math.PI * 2 / 10) for i in [0..10])
 
 
+class Branch extends Thing
 
-class Obstacle extends Thing
+	@nextID: 1
+
+	highestAltitude: 0
+	forkDistance: Config.branchDistanceMax
+	knotSpacing: Config.knotSpacing
+	distanceTravelled: 0
+	lastKnotDistance: 0  # distance of last knot from root
+
+	root: null
+	star: null
+	tip: null
+	knots: null
+
+	isGrowing: -> @star?
+
+	constructor: (@parent) ->
+		@id = Branch.nextID++
+		if @parent instanceof Branch
+			@root = new Vec @parent.tip
+		else
+			@root = new Vec @parent
+			@parent = null
+		@tip = new Vec @root
+		@knots = []
+		@doKnot()
+
+	setStar: (star) ->
+		star.branch?.star = null
+		star.branch = this
+		@star = star
+		@tip = @star.position
+
+	update: (dt) ->
+		if @star?
+			@distanceTravelled += @star.velocity().length()
+			
+			if @distanceTravelled - @lastKnotDistance > @knotSpacing
+				@doKnot()	
+
+			if @markForNoGrow
+				@markForNoGrow = false
+				@star = null
+
+	render: (ctx) ->
+		ctx.beginPath()
+		GFX.drawLineString ctx, @knots, @tip
+		ctx.strokeStyle = "rgb(0, #{@id * 64}, 0)"
+		ctx.fillStyle = rainbow()
+		ctx.stroke()
+
+	doKnot: ->
+		@knots.push new Vec @tip
+		@angle += (Math.random() - 0.5) * Config.knotAngleJitter
+		@lastKnotDistance = @distanceTravelled
+		@highestAltitude = -@tip.y if -@tip.y > @highestAltitude
+
+	forkable: ->  # if true, will be forked by PlayState
+		@distanceTravelled > @forkDistance
+
+
+class Obstacle extends Collidable
 
 	constructor: (@position, @velocity) ->
 		@velocity ?= new Vec 0, 0
@@ -66,8 +178,7 @@ class Obstacle extends Thing
 
 	update: ->
 		@position.add @velocity
-		@qbox.update()
-		globals.quadtree.insert @qbox
+		super
 
 
 class Balloon extends Obstacle

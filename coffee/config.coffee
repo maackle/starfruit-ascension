@@ -9,27 +9,38 @@ Atmosphere =
 	exopause: 100000 * atmoscale
 
 Config = 
+
+	# GENERAL
 	mainFont: 'Monoton'
 	hudFont: 'Offside'
-	growthRate: 15 				# normal speed
-	starThrustRate: 18 			# speed while left mousedown
-
-	autoFork: true 				# form after branchDistanceMax
 	debugDraw: true 			# draw AABBs around Collidables
 
+	
+	# BRANCHES + STARS
+	starSpeed: 15 				# normal speed
+	starHyperSpeed: 18 			# speed while left mousedown
+	autoFork: true 				# form after branchDistanceMax
 	branchAngle: Math.PI / 3 	# deviation from path, radians
 	branchAngleUpwardWeight: 0.1 # add a small component of upwards direction
-	branchDistanceMin: 1500 	# player can initiate fork after this tis distance
-	branchDistanceMax: 3000		# any branch longer than this will be forked
+	branchDistanceMin: 100 	# player can initiate fork after this tis distance
+	branchDistanceMax: 300		# any branch longer than this will be forked
 	branchFibers: 3 			# how many line strings to use to draw the branch
 	branchWidth: 10 			# how wide, total, is the branch
+	knotSpacing: 100 			# how far to travel before adding a knot
+	knotSpacingWhileThrusting: 50
+	knotAngleJitter: Math.PI / 24	# angular randomness to jostle the path
 
+	starRadius: 16
+	starInnerRadius: 8
+	starNovaRadius: 32 				# how big to draw a dead star marker
+	starNovaTime: 1.5 				# unused, time to animate star death in seconds
+	starSafetyDistance: 128 		# how far a star can travel before it becomes collidable.  
+									#	 used to prevent immediate annihilation of new branches
+
+
+	# WINDOW
 	autokillDistanceRatio: 1.25  # kill any stars that are further from the highest star by this ratio of "screen size"
 	autokillOffscreenX: 600  	# kill any stars that are offscreen by this much in the X axis
-
-	knotDistance: 100 				# how many pixels to travel before adding a knot
-	knotDistanceWhileThrusting: 50
-	knotAngleJitter: Math.PI / 24	# angular randomness to jostle the path
 
 	probability:
 		cloud: (height) ->
@@ -54,20 +65,12 @@ Config =
 			else if height > Atmosphere.mesopause then base + (height - Atmosphere.mesopause) / Atmosphere.mesopause
 			else 0.05
 
-	starNovaRadius: 32 				# how big to draw a dead star marker
-	starNovaTime: 1.5 				# unused, time to animate star death in seconds
-	starSafetyDistance: 128 		# how far a star can travel before it becomes collidable.  
-									#	 used to prevent immediate annihilation of new branches
 	images:
 		star: new ImageResource 'img/star-32.png'
 		cloud: new ImageResource 'img/cloud-4-a.png'
 		balloon: new ImageResource 'img/balloon.png'
 		satellite: new ImageResource 'img/satellite.png'
 		cookie: new ImageResource 'img/cookie.png'
-
-	starOffset:
-		x: 16
-		y: 16
 
 	atmosphere:
 		layers: [

@@ -93,15 +93,20 @@ class Viewport
 class GameState
 
 	_timesPushed: 0
-	_boundEvents: []
+	_boundEvents: null
 
 	game: null  # this is set when being pushed onto a GameEngine and cleared when being popped
 	parent: null  # which GameState called this?
 
+	constructor: ->
+		@_boundEvents = []
+
 	bind: (what, events, fn) -> 
+		@_boundEvents ?= []
 		@_boundEvents.push [what, events, fn]
 
 	_bindEvents: ->
+		@_boundEvents ?= []
 		for e in @_boundEvents
 			[what, events, fn] = e
 			$(what).on events, fn
@@ -123,17 +128,22 @@ class GameState
 class GameEngine
 
 	canvas: null
-	mouse: new Vec 0, 0
+	mouse: null
 
-	config: {}
-	states: []
+	config: null
+	states: null
 	intervals:
 		gameLoop: null
 
 	constructor: (opts) ->
+		@states = []
+		@mouse = new Vec 0, 0
+		
 		@config = _.defaults opts,
 			fps: 30
 			fullscreen: true
+
+		{@preUpdate, @postUpdate, @preRender, @postRender} = opts
 
 		@canvas = opts.canvas ? throw 'no canvas supplied'
 
@@ -174,8 +184,12 @@ class GameEngine
 	doLoop: (dt) ->
 		state = @currentState()
 		throw 'not a state' if not state instanceof GameState
+		@preUpdate?()
 		state.update(dt)
+		@postUpdate?()
+		@preRender?()
 		state.render()
+		@postRender?()
 
 	togglePanic: ->
 		if @intervals.gameLoop?
