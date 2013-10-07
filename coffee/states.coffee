@@ -57,7 +57,7 @@ class PlayState extends GameState
 				newStar.angle -= Config.branchAngle
 				star.angle += Config.branchAngle
 				@stars.push newStar
-				console.log branch.knots, left.knots, right.knots
+				branch.stop()
 				@branches = @collectBranches()
 
 		for branch in @branches
@@ -100,7 +100,7 @@ class PlayState extends GameState
 				[]
 			else
 				parents = []
-				parents.push branch.parent for branch in branches when branch.parent not in visited
+				parents.push branch.parent for branch in branches when branch.parent not in parents
 				branches.concat level(_.compact(parents))
 
 		leaves = (star.branch for star in @stars)

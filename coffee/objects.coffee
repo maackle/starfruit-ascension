@@ -166,6 +166,10 @@ class Branch extends Thing
 		@lastKnotDistance = @distanceTravelled
 		@highestAltitude = -@tip.y if -@tip.y > @highestAltitude
 
+	stop: ->
+		@star = null
+		@tip = new Vec @tip  # stop following the star
+
 	forkable: ->  # if true, will be forked by PlayState
 		@distanceTravelled > @forkDistance
 

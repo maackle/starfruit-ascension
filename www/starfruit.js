@@ -1035,6 +1035,11 @@
       }
     };
 
+    Branch.prototype.stop = function() {
+      this.star = null;
+      return this.tip = new Vec(this.tip);
+    };
+
     Branch.prototype.forkable = function() {
       return this.distanceTravelled > this.forkDistance;
     };
@@ -1300,7 +1305,7 @@
           newStar.angle -= Config.branchAngle;
           star.angle += Config.branchAngle;
           this.stars.push(newStar);
-          console.log(branch.knots, left.knots, right.knots);
+          branch.stop();
           this.branches = this.collectBranches();
         }
       }
@@ -1364,7 +1369,7 @@
           parents = [];
           for (_i = 0, _len = branches.length; _i < _len; _i++) {
             branch = branches[_i];
-            if (_ref1 = branch.parent, __indexOf.call(visited, _ref1) < 0) {
+            if (_ref1 = branch.parent, __indexOf.call(parents, _ref1) < 0) {
               parents.push(branch.parent);
             }
           }
