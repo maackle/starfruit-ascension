@@ -1,3 +1,158 @@
+'use strict'
+
+M = {}
+
+NotImplemented = {
+
+}
+
+M.context = (ctx, fn) ->
+	ctx.save()
+	fn(ctx)
+	ctx.restore()
+
+class Module
+
+	@__keywords: ['extended']
+
+	@extend: (obj) ->
+		for key, value of obj when key not in Module.__keywords
+			this[key] = value
+		for key, value of obj.Meta
+			this::[key] = value
+		obj.extended?.apply(this)
+
+class Vec
+
+	@immutable: ->
+		v = new Vec arguments
+		Object.freeze(v)
+
+	@polar: (r, t) ->
+		x = Math.cos(t) * r
+		y = Math.sin(t) * r
+		new Vec x, y
+
+	constructor: ->
+		if arguments.length == 1
+			v = arguments[0]
+			@x = v.x
+			@y = v.y
+		else if arguments.length == 2
+			[@x, @y] = arguments
+
+	add: (v) ->
+		@x += v.x
+		@y += v.y
+		this
+
+	sub: (v) ->
+		@x -= v.x
+		@y -= v.y
+		this
+
+	lengthSquared: ->
+		return @x*@x + @y*@y
+
+	length: ->
+		Math.sqrt @lengthSquared()
+
+	angle: ->
+		return clampAngleSigned Math.atan2 @y, @x
+
+Vec.zero = Vec.immutable 0, 0
+Vec.one = Vec.immutable 1, 1
+
+
+class Quad
+
+	x: null
+	y: null
+	w: null
+	h: null
+
+	constructor: ->
+		if arguments.length == 4  # x, y, w, h
+			[@x, @y, @w, @h] = arguments
+		else throw 'unsupported Quad arguments'
+
+	left: -> @x
+	top: -> @y
+	bottom: -> @y + @h
+	right: -> @x + @w
+	width: -> @w
+	height: -> @h
+
+	object: ->
+		left: @x
+		top: @y
+		bottom: @y + @h
+		right: @x + @w
+		width: @w
+		height: @h
+
+	hitTest: (vec) ->
+		vec.x >= @x and vec.y >= @y and vec.x <= @x + @w and vec.y <= @y + @h
+
+
+class ImageResource
+
+	@_cache: {}
+	image: null
+	loaded: false
+
+	constructor: (o) ->
+		console.assert o?
+		if o instanceof Image
+			im = o
+		else
+			hit = ImageResource._cache[o]?
+			if hit
+				im = hit
+			else
+				im = new Image
+				im.src = o
+				im.onload = => @loaded = true
+				ImageResource._cache[0] = im
+		@image = im
+
+
+
+class Thing
+
+	angle: 0.0
+	scale: 1.0
+	position: null
+
+	render: -> throw NotImplemented
+	update: -> throw NotImplemented
+	
+	withTransform: (ctx, fn) ->
+		ctx.save()
+		ctx.translate @position.x, @position.y  # offset correction happens when drawing the sprite.
+		ctx.rotate @angle
+		ctx.scale @scale, @scale
+		# ctx.translate -@offset.x, -@offset.y
+		fn()
+		ctx.restore()
+
+
+
+GFX =
+	drawLineString: (ctx, points, more...) ->
+		ctx.moveTo points[0].x, points[0].y
+		for vec in points[1..]
+			ctx.lineTo vec.x, vec.y
+		for vec in more
+			ctx.lineTo vec.x, vec.y
+
+	drawImage: (ctx, im, pos, offset) ->
+		if not offset?
+			offset = 
+				x: 0
+				y: 0
+		withImage im, (im) =>
+			ctx.drawImage im, pos.x - offset.x, pos.y - offset.y
 
 
 class Sprite
@@ -70,14 +225,13 @@ class Viewport
 
 	dimensions: -> [@canvas.width, @canvas.height]
 	
-	worldBounds: ->  # TODO: scale + rotation
+	worldQuad: ->  # TODO: scale + rotation
 		# get rectangle that corresponds to the view, in world coordinates
 		[w,h] = [@canvas.width, @canvas.height]
 		[ox, oy] = @offset
-		left: -(ox + @scroll.x + 0.5)
-		top: -(oy + @scroll.y + 0.5)
-		width: w
-		height: h
+		x = -(ox + @scroll.x + 0.5)
+		y = -(oy + @scroll.y + 0.5)
+		new Quad x, y, w, h
 
 	screen2world: (screen) ->  # TODO: scale + rotation
 		[ox, oy] = @offset
@@ -182,6 +336,7 @@ class GameEngine
 		state
 
 	doLoop: (dt) ->
+		# console.debug 'tick'
 		state = @currentState()
 		throw 'not a state' if not state instanceof GameState
 		@preUpdate?()

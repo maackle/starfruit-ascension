@@ -20,7 +20,7 @@ Config =
 	starSpeed: 15 				# normal speed
 	starHyperSpeed: 18 			# speed while left mousedown
 	autoFork: true 				# form after branchDistanceMax
-	branchAngle: Math.PI / 3 	# deviation from path, radians
+	branchAngle: Math.PI / 6 	# deviation from path, radians
 	branchAngleUpwardWeight: 0.1 # add a small component of upwards direction
 	branchDistanceMin: 100 	# player can initiate fork after this tis distance
 	branchDistanceMax: 300		# any branch longer than this will be forked
@@ -33,7 +33,7 @@ Config =
 	starRadius: 16
 	starInnerRadius: 8
 	starNovaRadius: 32 				# how big to draw a dead star marker
-	starNovaTime: 1.5 				# unused, time to animate star death in seconds
+	starNovaMaxRadius: 320 			# unused, time to animate star death in seconds
 	starSafetyDistance: 128 		# how far a star can travel before it becomes collidable.  
 									#	 used to prevent immediate annihilation of new branches
 

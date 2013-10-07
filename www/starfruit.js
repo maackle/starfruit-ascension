@@ -1,5 +1,5 @@
 (function() {
-  var Atmosphere, Balloon, Branch, Cloud, Collidable, Config, Cookie, GFX, GameEngine, GameOverState, GameState, ImageResource, M, Module, NotImplemented, Obstacle, PlayState, Quad, QuadtreeBox, Satellite, Sprite, Star, Thing, Vec, Viewport, atmoscale, clampAngleSigned, globals, i, lerp, makeImage, withImage, withImages, _ref, _ref1,
+  var Atmosphere, Balloon, Branch, Cloud, Collidable, Config, Cookie, GFX, GameEngine, GameOverState, GameState, ImageResource, M, Module, NotImplemented, Nova, Obstacle, PlayState, Quad, QuadtreeBox, Satellite, Sprite, Star, Thing, Vec, Viewport, atmoscale, clampAngleSigned, globals, i, lerp, makeImage, withImage, withImages, _ref, _ref1,
     __slice = [].slice,
     __indexOf = [].indexOf || function(item) { for (var i = 0, l = this.length; i < l; i++) { if (i in this && this[i] === item) return i; } return -1; },
     __hasProp = {}.hasOwnProperty,
@@ -76,6 +76,33 @@
     }
     return im;
   };
+
+  (function() {
+    'use strict';
+    var B2Body, B2World, Mixin;
+    Mixin = (function() {
+      function Mixin() {}
+
+      return Mixin;
+
+    })();
+    B2World = (function() {
+      function B2World() {}
+
+      B2World.prototype.world = null;
+
+      return B2World;
+
+    })();
+    return B2Body = (function() {
+      function B2Body() {}
+
+      B2Body.prototype.body = null;
+
+      return B2Body;
+
+    })();
+  })();
 
   'use strict';
 
@@ -188,12 +215,43 @@
       }
     }
 
+    Quad.prototype.left = function() {
+      return this.x;
+    };
+
+    Quad.prototype.top = function() {
+      return this.y;
+    };
+
+    Quad.prototype.bottom = function() {
+      return this.y + this.h;
+    };
+
+    Quad.prototype.right = function() {
+      return this.x + this.w;
+    };
+
     Quad.prototype.width = function() {
-      return w;
+      return this.w;
     };
 
     Quad.prototype.height = function() {
-      return h;
+      return this.h;
+    };
+
+    Quad.prototype.object = function() {
+      return {
+        left: this.x,
+        top: this.y,
+        bottom: this.y + this.h,
+        right: this.x + this.w,
+        width: this.w,
+        height: this.h
+      };
+    };
+
+    Quad.prototype.hitTest = function(vec) {
+      return vec.x >= this.x && vec.y >= this.y && vec.x <= this.x + this.w && vec.y <= this.y + this.h;
     };
 
     return Quad;
@@ -233,40 +291,6 @@
 
   })();
 
-  Sprite = (function() {
-    function Sprite(im, offset) {
-      var _this = this;
-      this.im = im;
-      this.offset = offset;
-      if (this.offset == null) {
-        console.warn('no offset set', this);
-        withImage(this.im, function(im) {
-          return _this.offset = {
-            x: _this.im.width / 2,
-            y: _this.im.height / 2
-          };
-        });
-      }
-    }
-
-    Sprite.prototype.draw = function(pos, angle) {
-      var _this = this;
-      if (pos == null) {
-        pos = Vec.zero;
-      }
-      return withImage(this.im, function(im) {
-        game.ctx.save();
-        game.ctx.translate(pos.x + 0 * _this.offset.x, pos.y + 0 * _this.offset.y);
-        game.ctx.rotate(angle);
-        game.ctx.drawImage(im, -_this.offset.x, -_this.offset.y);
-        return game.ctx.restore();
-      });
-    };
-
-    return Sprite;
-
-  })();
-
   Thing = (function() {
     function Thing() {}
 
@@ -284,13 +308,13 @@
       throw NotImplemented;
     };
 
-    Thing.prototype.withTransform = function(fn) {
-      game.ctx.save();
-      game.ctx.translate(this.position.x, this.position.y);
-      game.ctx.rotate(this.angle);
-      game.ctx.scale(this.scale, this.scale);
+    Thing.prototype.withTransform = function(ctx, fn) {
+      ctx.save();
+      ctx.translate(this.position.x, this.position.y);
+      ctx.rotate(this.angle);
+      ctx.scale(this.scale, this.scale);
       fn();
-      return game.ctx.restore();
+      return ctx.restore();
     };
 
     return Thing;
@@ -327,33 +351,6 @@
       });
     }
   };
-
-  (function() {
-    'use strict';
-    var B2Body, B2World, Mixin;
-    Mixin = (function() {
-      function Mixin() {}
-
-      return Mixin;
-
-    })();
-    B2World = (function() {
-      function B2World() {}
-
-      B2World.prototype.world = null;
-
-      return B2World;
-
-    })();
-    return B2Body = (function() {
-      function B2Body() {}
-
-      B2Body.prototype.body = null;
-
-      return B2Body;
-
-    })();
-  })();
 
   Sprite = (function() {
     Sprite.prototype.offset = null;
@@ -463,16 +460,13 @@
       return [this.canvas.width, this.canvas.height];
     };
 
-    Viewport.prototype.worldBounds = function() {
-      var h, ox, oy, w, _ref, _ref1;
+    Viewport.prototype.worldQuad = function() {
+      var h, ox, oy, w, x, y, _ref, _ref1;
       _ref = [this.canvas.width, this.canvas.height], w = _ref[0], h = _ref[1];
       _ref1 = this.offset, ox = _ref1[0], oy = _ref1[1];
-      return {
-        left: -(ox + this.scroll.x + 0.5),
-        top: -(oy + this.scroll.y + 0.5),
-        width: w,
-        height: h
-      };
+      x = -(ox + this.scroll.x + 0.5);
+      y = -(oy + this.scroll.y + 0.5);
+      return new Quad(x, y, w, h);
     };
 
     Viewport.prototype.screen2world = function(screen) {
@@ -708,7 +702,7 @@
     starSpeed: 15,
     starHyperSpeed: 18,
     autoFork: true,
-    branchAngle: Math.PI / 3,
+    branchAngle: Math.PI / 6,
     branchAngleUpwardWeight: 0.1,
     branchDistanceMin: 100,
     branchDistanceMax: 300,
@@ -720,7 +714,7 @@
     starRadius: 16,
     starInnerRadius: 8,
     starNovaRadius: 32,
-    starNovaTime: 1.5,
+    starNovaMaxRadius: 320,
     starSafetyDistance: 128,
     autokillDistanceRatio: 1.25,
     autokillOffscreenX: 600,
@@ -824,21 +818,24 @@
     QuadtreeBox.prototype.dimensions = null;
 
     function QuadtreeBox(_arg) {
-      this.position = _arg.position, this.offset = _arg.offset, this.dimensions = _arg.dimensions, this.object = _arg.object;
+      var dimensions;
+      this.position = _arg.position, this.offset = _arg.offset, dimensions = _arg.dimensions, this.object = _arg.object;
       if (this.offset == null) {
         this.offset = Vec.zero;
       }
       this.update();
+      this.width = dimensions[0], this.height = dimensions[1];
     }
 
     QuadtreeBox.prototype.update = function() {
-      var h, w, x, y, _ref, _ref1;
+      var x, y, _ref;
       _ref = this.position, x = _ref.x, y = _ref.y;
       this.left = x - this.offset.x;
-      this.top = y - this.offset.y;
-      _ref1 = this.dimensions, w = _ref1[0], h = _ref1[1];
-      this.width = w;
-      return this.height = h;
+      return this.top = y - this.offset.y;
+    };
+
+    QuadtreeBox.prototype.getHits = function(quadtree) {
+      return quadtree.getObjects(this.left, this.top, this.width, this.height);
     };
 
     return QuadtreeBox;
@@ -875,12 +872,15 @@
 
     Star.prototype.id = null;
 
+    Star.prototype.isDead = false;
+
     Star.prototype.branch = null;
 
-    Star.prototype.angle = -Math.PI / 2 + 0.1;
+    Star.prototype.angle = -Math.PI / 2;
 
-    function Star(position) {
+    function Star(position, angle) {
       this.position = position;
+      this.angle = angle;
       this.id = Star.nextID++;
       this.qbox = new QuadtreeBox({
         position: this.position,
@@ -904,6 +904,11 @@
 
     Star.prototype.isSafe = function() {
       return this.branch.distanceTravelled < Config.starSafetyDistance;
+    };
+
+    Star.prototype.die = function() {
+      this.isDead = true;
+      return delete this.branch.star;
     };
 
     Star.prototype.update = function() {
@@ -958,6 +963,8 @@
     __extends(Branch, _super);
 
     Branch.nextID = 1;
+
+    Branch.prototype.isDead = false;
 
     Branch.prototype.highestAltitude = 0;
 
@@ -1021,9 +1028,11 @@
     Branch.prototype.render = function(ctx) {
       ctx.beginPath();
       GFX.drawLineString(ctx, this.knots, this.tip);
-      ctx.strokeStyle = "rgb(0, " + (this.id * 64) + ", 0)";
+      ctx.lineWidth = Config.branchWidth;
+      ctx.strokeStyle = rainbow();
       ctx.fillStyle = rainbow();
-      return ctx.stroke();
+      ctx.stroke();
+      return ctx.lineWidth = 1;
     };
 
     Branch.prototype.doKnot = function() {
@@ -1035,9 +1044,13 @@
       }
     };
 
+    Branch.prototype.die = function() {
+      return this.isDead = true;
+    };
+
     Branch.prototype.stop = function() {
-      this.star = null;
-      return this.tip = new Vec(this.tip);
+      this.tip = new Vec(this.tip);
+      return this.star = null;
     };
 
     Branch.prototype.forkable = function() {
@@ -1045,6 +1058,49 @@
     };
 
     return Branch;
+
+  })(Thing);
+
+  Nova = (function(_super) {
+    __extends(Nova, _super);
+
+    Nova.prototype.isDead = false;
+
+    function Nova(star) {
+      this.position = new Vec(star.position);
+      this.angle = new Vec(star.angle);
+      this.scale = 1.0;
+      this.time = 0;
+    }
+
+    Nova.prototype.update = function(dt) {
+      this.scale += 10 * dt;
+      this.time += dt;
+      if (this.radius() > Config.starNovaMaxRadius) {
+        return this.die();
+      }
+    };
+
+    Nova.prototype.radius = function() {
+      return Star.radius * this.scale;
+    };
+
+    Nova.prototype.die = function() {
+      return this.isDead = true;
+    };
+
+    Nova.prototype.render = function(ctx) {
+      var _this = this;
+      return this.withTransform(ctx, function() {
+        ctx.beginPath();
+        ctx.lineWidth = 2;
+        GFX.drawLineString(ctx, Star.vertices);
+        ctx.strokeStyle = rainbow(10);
+        return ctx.stroke();
+      });
+    };
+
+    return Nova;
 
   })(Thing);
 
@@ -1252,7 +1308,7 @@
       this.obstacles.push(new Satellite(new Vec(-100, 0), new Vec(1, 0)));
       this.obstacles.push(new Cloud(new Vec(-100, -100), new Vec(1, 0)));
       this.obstacles.push(new Balloon(new Vec(-100, -100), new Vec(1, 0)));
-      star = new Star(new Vec(0, 0));
+      star = new Star(new Vec(0, 0), -Math.PI / 2);
       this.stars.push(star);
       branch = new Branch(new Vec(0, 0));
       branch.setStar(star);
@@ -1274,7 +1330,7 @@
     PlayState.prototype.exit = function() {};
 
     PlayState.prototype.update = function(dt) {
-      var branch, h, left, newStar, right, star, t, w, _i, _j, _k, _l, _len, _len1, _len2, _len3, _len4, _m, _ref1, _ref2, _ref3, _ref4, _ref5, _ref6;
+      var branch, h, left, newStar, right, star, t, viewBottom, w, _i, _j, _k, _l, _len, _len1, _len2, _len3, _len4, _m, _ref1, _ref2, _ref3, _ref4, _ref5, _ref6, _ref7;
       this.quadtree.reset();
       _ref1 = this.novae;
       for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
@@ -1299,46 +1355,78 @@
         if (Config.autoFork && branch.forkable()) {
           left = new Branch(branch);
           right = new Branch(branch);
-          newStar = new Star(new Vec(branch.tip));
+          newStar = new Star(new Vec(branch.tip), star.angle);
           left.setStar(newStar);
           right.setStar(star);
           newStar.angle -= Config.branchAngle;
           star.angle += Config.branchAngle;
           this.stars.push(newStar);
           branch.stop();
-          this.branches = this.collectBranches();
+          this.branches.push(left);
+          this.branches.push(right);
         }
       }
+      viewBottom = this.view.worldQuad().bottom();
       _ref5 = this.branches;
       for (_m = 0, _len4 = _ref5.length; _m < _len4; _m++) {
         branch = _ref5[_m];
         branch.update(dt);
+        if (branch.highestAltitude < -viewBottom) {
+          branch.die();
+        }
       }
       this.highestStar = _.min(this.stars, function(s) {
         return s.position.y;
       });
       _ref6 = this.view.dimensions(), w = _ref6[0], h = _ref6[1];
-      if (-this.highestStar.position.y > this.heightAchieved) {
+      if (-((_ref7 = this.highestStar) != null ? _ref7.position.y : void 0) > this.heightAchieved) {
         this.heightAchieved = -this.highestStar.position.y;
       }
-      return this.view.scroll.y = Math.max(0, this.heightAchieved);
+      this.view.scroll.y = Math.max(0, this.heightAchieved);
+      this.handleCollision();
+      this.bringOutTheDead();
+      console.log(this.stars.length, this.branches.length, this.novae.length);
+      if (this.stars.length === 0) {
+        return this.game.popState();
+      }
     };
 
-    PlayState.prototype.render = function() {
+    PlayState.prototype.render = function(ctx) {
       var _this = this;
       this.view.clearScreen('blue');
       this.view.draw(function(ctx) {
-        var box, r, renderables, _i, _j, _len, _len1, _ref1, _results;
+        var box, renderables, t, _i, _j, _k, _l, _len, _len1, _len2, _len3, _len4, _len5, _m, _n, _ref1, _ref2, _ref3, _ref4, _ref5, _ref6, _results;
         renderables = _this.novae.concat(_this.obstacles.concat(_this.clouds.concat(_this.stars.concat(_this.branches))));
-        for (_i = 0, _len = renderables.length; _i < _len; _i++) {
-          r = renderables[_i];
-          r.render(ctx);
+        _ref1 = _this.novae;
+        for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
+          t = _ref1[_i];
+          t.render(ctx);
+        }
+        _ref2 = _this.branches;
+        for (_j = 0, _len1 = _ref2.length; _j < _len1; _j++) {
+          t = _ref2[_j];
+          t.render(ctx);
+        }
+        _ref3 = _this.stars;
+        for (_k = 0, _len2 = _ref3.length; _k < _len2; _k++) {
+          t = _ref3[_k];
+          t.render(ctx);
+        }
+        _ref4 = _this.obstacles;
+        for (_l = 0, _len3 = _ref4.length; _l < _len3; _l++) {
+          t = _ref4[_l];
+          t.render(ctx);
+        }
+        _ref5 = _this.clouds;
+        for (_m = 0, _len4 = _ref5.length; _m < _len4; _m++) {
+          t = _ref5[_m];
+          t.render(ctx);
         }
         if (Config.debugDraw) {
-          _ref1 = _this.quadtree.getObjects();
+          _ref6 = _this.quadtree.getObjects();
           _results = [];
-          for (_j = 0, _len1 = _ref1.length; _j < _len1; _j++) {
-            box = _ref1[_j];
+          for (_n = 0, _len5 = _ref6.length; _n < _len5; _n++) {
+            box = _ref6[_n];
             ctx.beginPath();
             ctx.rect(box.left, box.top, box.width, box.height);
             ctx.strokeStyle = 'red';
@@ -1358,36 +1446,79 @@
       });
     };
 
-    PlayState.prototype.collectBranches = function() {
-      var branches, leaves, level, star, visited;
-      visited = [];
-      level = function(branches) {
-        var branch, parents, _i, _len, _ref1;
-        if (branches.length === 0) {
-          return [];
-        } else {
-          parents = [];
-          for (_i = 0, _len = branches.length; _i < _len; _i++) {
-            branch = branches[_i];
-            if (_ref1 = branch.parent, __indexOf.call(parents, _ref1) < 0) {
-              parents.push(branch.parent);
-            }
-          }
-          return branches.concat(level(_.compact(parents)));
-        }
-      };
-      leaves = (function() {
+    PlayState.prototype.bringOutTheDead = function() {
+      var deadBranches, deadNovae, deadStars, t;
+      deadStars = (function() {
         var _i, _len, _ref1, _results;
         _ref1 = this.stars;
         _results = [];
         for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
-          star = _ref1[_i];
-          _results.push(star.branch);
+          t = _ref1[_i];
+          if (t.isDead) {
+            _results.push(t);
+          }
         }
         return _results;
       }).call(this);
-      branches = level(leaves);
-      return branches;
+      deadBranches = (function() {
+        var _i, _len, _ref1, _results;
+        _ref1 = this.branches;
+        _results = [];
+        for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
+          t = _ref1[_i];
+          if (t.isDead) {
+            _results.push(t);
+          }
+        }
+        return _results;
+      }).call(this);
+      deadNovae = (function() {
+        var _i, _len, _ref1, _results;
+        _ref1 = this.novae;
+        _results = [];
+        for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
+          t = _ref1[_i];
+          if (t.isDead) {
+            _results.push(t);
+          }
+        }
+        return _results;
+      }).call(this);
+      this.stars = _.difference(this.stars, deadStars);
+      this.branches = _.difference(this.branches, deadBranches);
+      return this.novae = _.difference(this.novae, deadNovae);
+    };
+
+    PlayState.prototype.handleCollision = function(objects) {
+      var alreadyHandled, hits, star, viewQuad, _i, _len, _ref1, _results,
+        _this = this;
+      alreadyHandled = [];
+      viewQuad = this.view.worldQuad();
+      _ref1 = this.stars;
+      _results = [];
+      for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
+        star = _ref1[_i];
+        if (!star.isDead) {
+          if (!viewQuad.hitTest(star.position)) {
+            _results.push(this.killStar(star));
+          } else {
+            hits = star.qbox.getHits(this.quadtree).filter(function(h) {
+              return h.object !== star && !(h.object instanceof Star && h.object.isDead);
+            });
+            if (hits.length > 1) {
+              _results.push(this.killStar(star));
+            } else {
+              _results.push(void 0);
+            }
+          }
+        }
+      }
+      return _results;
+    };
+
+    PlayState.prototype.killStar = function(star) {
+      this.novae.push(new Nova(star));
+      return star.die();
     };
 
     return PlayState;

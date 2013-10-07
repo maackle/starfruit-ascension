@@ -30,7 +30,7 @@ module.exports = (grunt) ->
                 files:
                     "<%= config.dist %>/starfruit.js": [
                         "<%= config.app %>/coffee/util.coffee",
-                        "<%= config.app %>/coffee/classes.coffee",
+                        # "<%= config.app %>/coffee/classes.coffee",
                         "<%= config.app %>/coffee/mixins.coffee",
                         "<%= config.app %>/coffee/engine.coffee",
                         # "<%= config.app %>/coffee/game.coffee",

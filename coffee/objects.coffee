@@ -29,17 +29,18 @@ class QuadtreeBox
 	offset: null  # Vec
 	dimensions: null
 
-	constructor: ({@position, @offset, @dimensions, @object}) ->
+	constructor: ({@position, @offset, dimensions, @object}) ->
 		@offset ?= Vec.zero
 		@update()
+		[@width, @height] = dimensions
 
 	update: ->
 		{x, y} = @position
 		@left = x - @offset.x
 		@top = y - @offset.y
-		[w, h] = @dimensions
-		@width = w
-		@height = h
+
+	getHits: (quadtree) ->
+		quadtree.getObjects @left, @top, @width, @height
 
 
 class Collidable extends Thing
@@ -58,10 +59,11 @@ class Star extends Collidable
 	@nextID: 1
 	id: null
 
+	isDead: false
 	branch: null
-	angle: -Math.PI / 2 + 0.1
+	angle: -Math.PI / 2
 
-	constructor: (@position) ->
+	constructor: (@position,  @angle) ->
 		@id = Star.nextID++
 		@qbox = new QuadtreeBox
 			position: @position
@@ -76,6 +78,10 @@ class Star extends Collidable
 	velocity: -> Vec.polar @speed(), @angle
 
 	isSafe: -> @branch.distanceTravelled < Config.starSafetyDistance
+
+	die: -> 
+		@isDead = true
+		delete @branch.star
 
 	update: ->
 		if @attraction()
@@ -112,6 +118,7 @@ class Branch extends Thing
 
 	@nextID: 1
 
+	isDead: false
 	highestAltitude: 0
 	forkDistance: Config.branchDistanceMax
 	knotSpacing: Config.knotSpacing
@@ -147,7 +154,7 @@ class Branch extends Thing
 			@distanceTravelled += @star.velocity().length()
 			
 			if @distanceTravelled - @lastKnotDistance > @knotSpacing
-				@doKnot()	
+				@doKnot()
 
 			if @markForNoGrow
 				@markForNoGrow = false
@@ -156,9 +163,11 @@ class Branch extends Thing
 	render: (ctx) ->
 		ctx.beginPath()
 		GFX.drawLineString ctx, @knots, @tip
-		ctx.strokeStyle = "rgb(0, #{@id * 64}, 0)"
+		ctx.lineWidth = Config.branchWidth
+		ctx.strokeStyle = rainbow()
 		ctx.fillStyle = rainbow()
 		ctx.stroke()
+		ctx.lineWidth = 1
 
 	doKnot: ->
 		@knots.push new Vec @tip
@@ -166,12 +175,44 @@ class Branch extends Thing
 		@lastKnotDistance = @distanceTravelled
 		@highestAltitude = -@tip.y if -@tip.y > @highestAltitude
 
+	die: ->
+		@isDead = true
+
 	stop: ->
-		@star = null
 		@tip = new Vec @tip  # stop following the star
+		@star = null
 
 	forkable: ->  # if true, will be forked by PlayState
 		@distanceTravelled > @forkDistance
+
+
+class Nova extends Thing
+
+	isDead: false
+
+	constructor: (star) ->
+		@position = new Vec star.position
+		@angle = new Vec star.angle
+		@scale = 1.0
+		@time = 0
+
+	update: (dt)->
+		@scale += 10 * dt
+		@time += dt
+		if @radius() > Config.starNovaMaxRadius
+			@die()
+
+	radius: -> Star.radius * @scale
+
+	die: -> @isDead = true
+
+	render: (ctx) ->
+		@withTransform ctx, =>
+			ctx.beginPath()
+			ctx.lineWidth = 2
+			GFX.drawLineString ctx, Star.vertices
+			ctx.strokeStyle = rainbow(10)
+			ctx.stroke()
 
 
 class Obstacle extends Collidable

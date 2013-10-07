@@ -24,7 +24,7 @@ class PlayState extends GameState
 		@obstacles.push new Satellite(new Vec(-100,0), new Vec(1, 0))
 		@obstacles.push new Cloud(new Vec(-100,-100), new Vec(1, 0))
 		@obstacles.push new Balloon(new Vec(-100,-100), new Vec(1, 0))
-		star = new Star(new Vec 0, 0)
+		star = new Star (new Vec 0, 0), -Math.PI / 2
 		@stars.push star
 		branch = new Branch(new Vec 0, 0)
 		branch.setStar(star)
@@ -51,30 +51,47 @@ class PlayState extends GameState
 			if Config.autoFork and branch.forkable()
 				left = new Branch branch
 				right = new Branch branch
-				newStar = new Star new Vec branch.tip
+				newStar = new Star (new Vec branch.tip), star.angle
 				left.setStar newStar
 				right.setStar star
 				newStar.angle -= Config.branchAngle
 				star.angle += Config.branchAngle
 				@stars.push newStar
 				branch.stop()
-				@branches = @collectBranches()
+				@branches.push left
+				@branches.push right
+
+		viewBottom = @view.worldQuad().bottom()
 
 		for branch in @branches
 			branch.update(dt)
+			if branch.highestAltitude < -viewBottom
+				branch.die()
 
 		@highestStar = _.min @stars, (s) -> s.position.y
 		
 		[w, h] = @view.dimensions()
-		@heightAchieved = -@highestStar.position.y if -@highestStar.position.y > @heightAchieved
+		@heightAchieved = -@highestStar.position.y if -@highestStar?.position.y > @heightAchieved
 		@view.scroll.y = Math.max 0, @heightAchieved
 
+		@handleCollision()
+		@bringOutTheDead()
 
-	render: ->
+		console.log @stars.length, @branches.length, @novae.length
+
+		if @stars.length == 0
+			@game.popState()
+
+
+	render: (ctx) ->
 		@view.clearScreen('blue')
 		@view.draw (ctx) =>
 			renderables = @novae.concat @obstacles.concat @clouds.concat @stars.concat @branches
-			r.render(ctx) for r in renderables
+			t.render(ctx) for t in @novae
+			t.render(ctx) for t in @branches
+			t.render(ctx) for t in @stars
+			t.render(ctx) for t in @obstacles
+			t.render(ctx) for t in @clouds
 
 			if Config.debugDraw
 				for box in @quadtree.getObjects()
@@ -92,21 +109,31 @@ class PlayState extends GameState
 			ctx.fillText(parseInt(@heightAchieved) + 'm', 50, 100)
 			ctx.strokeText(parseInt(@heightAchieved) + 'm', 50, 100)
 
-	collectBranches: ->
-		visited = []
+	bringOutTheDead: ->
+		deadStars = (t for t in @stars when t.isDead)
+		deadBranches = (t for t in @branches when t.isDead)
+		deadNovae = (t for t in @novae when t.isDead)
+		@stars = _.difference @stars, deadStars
+		@branches = _.difference @branches, deadBranches
+		@novae = _.difference @novae, deadNovae
 
-		level = (branches) ->
-			if branches.length == 0
-				[]
+	handleCollision: (objects) ->
+		alreadyHandled = []
+		viewQuad = @view.worldQuad()
+		for star in @stars when not star.isDead
+			if not viewQuad.hitTest star.position
+				@killStar star
 			else
-				parents = []
-				parents.push branch.parent for branch in branches when branch.parent not in parents
-				branches.concat level(_.compact(parents))
+				hits = star.qbox.getHits(@quadtree).filter (h) =>
+					h.object != star and not (h.object instanceof Star and h.object.isDead)
+				if hits.length > 1
+					@killStar star
+			# for hit in hits when hit.object instanceof Star and not hit.object.isDead
+			# 	@killStar hit.object
 
-		leaves = (star.branch for star in @stars)
-		branches = level(leaves)
-		branches
-
-
+	killStar: (star) ->
+		# @stars = _.without @stars, star
+		@novae.push new Nova star
+		star.die()
 
 class GameOverState extends GameState
