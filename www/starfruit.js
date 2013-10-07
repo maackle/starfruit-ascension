@@ -326,18 +326,32 @@
   })();
 
   GFX = {
-    drawLineString: function() {
-      var ctx, more, points, vec, _i, _j, _len, _len1, _ref, _results;
-      ctx = arguments[0], points = arguments[1], more = 3 <= arguments.length ? __slice.call(arguments, 2) : [];
+    drawLineString: function(ctx, points, opts) {
+      var closed, more, vec, _i, _j, _k, _len, _len1, _len2, _ref, _ref1, _ref2, _results;
+      if (opts == null) {
+        opts = {};
+      }
+      _ref = _.defaults(opts, {
+        closed: false,
+        more: []
+      }), closed = _ref.closed, more = _ref.more;
+      ctx.beginPath();
       ctx.moveTo(points[0].x, points[0].y);
-      _ref = points.slice(1);
-      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        vec = _ref[_i];
+      _ref1 = points.slice(1);
+      for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
+        vec = _ref1[_i];
         ctx.lineTo(vec.x, vec.y);
       }
+      if (closed) {
+        _ref2 = points.slice(0, 2);
+        for (_j = 0, _len1 = _ref2.length; _j < _len1; _j++) {
+          vec = _ref2[_j];
+          ctx.lineTo(vec.x, vec.y);
+        }
+      }
       _results = [];
-      for (_j = 0, _len1 = more.length; _j < _len1; _j++) {
-        vec = more[_j];
+      for (_k = 0, _len2 = more.length; _k < _len2; _k++) {
+        vec = more[_k];
         _results.push(ctx.lineTo(vec.x, vec.y));
       }
       return _results;
@@ -493,7 +507,7 @@
   })();
 
   GameState = (function() {
-    GameState.prototype._timesPushed = 0;
+    GameState.prototype._isInitialized = false;
 
     GameState.prototype._boundEvents = null;
 
@@ -554,7 +568,7 @@
   GameEngine = (function() {
     GameEngine.prototype.canvas = null;
 
-    GameEngine.prototype.mouse = null;
+    GameEngine.prototype.mouse = {};
 
     GameEngine.prototype.config = null;
 
@@ -567,7 +581,11 @@
     function GameEngine(opts) {
       var _ref;
       this.states = [];
-      this.mouse = new Vec(0, 0);
+      this.mouse = {
+        position: new Vec(0, 0),
+        leftButton: false,
+        rightButton: false
+      };
       this.config = _.defaults(opts, {
         fps: 30,
         fullscreen: true
@@ -607,6 +625,12 @@
     GameEngine.prototype.pushState = function(state) {
       state.game = this;
       state.parent = this.currentState();
+      if (!state._isInitialized) {
+        if (typeof state.initialize === "function") {
+          state.initialize(game);
+        }
+        state._isInitialized = true;
+      }
       this.states.push(state);
       state._bindEvents();
       return state.enter();
@@ -639,7 +663,10 @@
         this.preRender();
       }
       state.render();
-      return typeof this.postRender === "function" ? this.postRender() : void 0;
+      if (typeof this.postRender === "function") {
+        this.postRender();
+      }
+      return typeof state.transition === "function" ? state.transition() : void 0;
     };
 
     GameEngine.prototype.togglePanic = function() {
@@ -662,8 +689,24 @@
         }
       });
       $(this.canvas).on('mousemove', function(e) {
-        _this.mouse.x = e.offsetX || e.layerX;
-        return _this.mouse.y = e.offsetY || e.layerY;
+        _this.mouse.position.x = e.offsetX || e.layerX;
+        return _this.mouse.position.y = e.offsetY || e.layerY;
+      });
+      $(this.canvas).on('mousedown', function(e) {
+        switch (e.which) {
+          case 1:
+            return _this.mouse.leftButton = true;
+          case 3:
+            return _this.mouse.rightButton = true;
+        }
+      });
+      $(this.canvas).on('mouseup', function(e) {
+        switch (e.which) {
+          case 1:
+            return _this.mouse.leftButton = false;
+          case 3:
+            return _this.mouse.rightButton = false;
+        }
       });
       $(this.canvas).on('contextmenu', function(e) {
         return e.preventDefault();
@@ -702,14 +745,13 @@
   Config = {
     mainFont: 'Monoton',
     hudFont: 'Offside',
-    debugDraw: true,
+    debugDraw: false,
     starSpeed: 15,
-    starHyperSpeed: 18,
+    starHyperSpeed: 25,
     autoFork: true,
     branchAngle: Math.PI / 6,
     branchAngleUpwardWeight: 0.1,
-    branchDistanceMin: 100,
-    branchDistanceMax: 300,
+    branchDistanceMax: 3000,
     branchFibers: 3,
     branchWidth: 10,
     knotSpacing: 100,
@@ -717,9 +759,10 @@
     knotAngleJitter: Math.PI / 24,
     starRadius: 16,
     starInnerRadius: 8,
-    starNovaRadius: 32,
-    starNovaMaxRadius: 320,
     starSafetyDistance: 128,
+    novaMaxRadius: 2000,
+    novaExplosionSpeed: 200,
+    gameOverSlowdown: 1.0,
     autokillDistanceRatio: 1.25,
     autokillOffscreenX: 600,
     probability: {
@@ -886,6 +929,8 @@
 
     Star.prototype.angle = -Math.PI / 2;
 
+    Star.prototype.attraction = null;
+
     function Star(position, angle) {
       this.position = position;
       this.angle = angle;
@@ -898,12 +943,12 @@
       });
     }
 
-    Star.prototype.attraction = function() {
-      return null;
-    };
-
     Star.prototype.speed = function() {
-      return Config.starSpeed;
+      if (this.attraction != null) {
+        return Config.starHyperSpeed;
+      } else {
+        return Config.starSpeed;
+      }
     };
 
     Star.prototype.velocity = function() {
@@ -921,8 +966,8 @@
 
     Star.prototype.update = function() {
       var a, da, diff;
-      if (this.attraction()) {
-        diff = new Vec(this.attraction());
+      if (this.attraction != null) {
+        diff = new Vec(this.attraction);
         diff.sub(this.position);
         a = clampAngleSigned(this.angle);
         da = clampAngleSigned(diff.angle() - a);
@@ -1035,7 +1080,9 @@
 
     Branch.prototype.render = function(ctx) {
       ctx.beginPath();
-      GFX.drawLineString(ctx, this.knots, this.tip);
+      GFX.drawLineString(ctx, this.knots, {
+        more: [this.tip]
+      });
       ctx.lineWidth = Config.branchWidth;
       ctx.strokeStyle = rainbow();
       ctx.fillStyle = rainbow();
@@ -1085,9 +1132,9 @@
     }
 
     Nova.prototype.update = function(dt) {
-      this.scale += 10 * dt;
+      this.scale += dt * Config.novaExplosionSpeed;
       this.time += dt;
-      if (this.radius() > Config.starNovaMaxRadius) {
+      if (this.radius() > Config.novaMaxRadius) {
         return this.die();
       }
     };
@@ -1105,7 +1152,9 @@
       return this.withTransform(ctx, function() {
         ctx.beginPath();
         ctx.lineWidth = 2;
-        GFX.drawLineString(ctx, Star.vertices);
+        GFX.drawLineString(ctx, Star.vertices, {
+          closed: true
+        });
         ctx.strokeStyle = rainbow(10);
         return ctx.stroke();
       });
@@ -1310,7 +1359,6 @@
         }
         return _results;
       })();
-      this.initialize();
     }
 
     PlayState.prototype.initialize = function() {
@@ -1357,6 +1405,11 @@
       _ref4 = this.stars;
       for (_l = 0, _len3 = _ref4.length; _l < _len3; _l++) {
         star = _ref4[_l];
+        if (this.game.mouse.leftButton) {
+          star.attraction = this.view.screen2world(this.game.mouse.position);
+        } else {
+          star.attraction = null;
+        }
         star.update(dt);
         branch = star.branch;
         if (Config.autoFork && branch.forkable()) {
@@ -1382,18 +1435,23 @@
           branch.die();
         }
       }
-      this.highestStar = _.min(this.stars, function(s) {
-        return s.position.y;
-      });
-      _ref6 = this.view.dimensions(), w = _ref6[0], h = _ref6[1];
-      if (-((_ref7 = this.highestStar) != null ? _ref7.position.y : void 0) > this.heightAchieved) {
-        this.heightAchieved = -this.highestStar.position.y;
-      }
-      this.view.scroll.y = Math.max(0, this.heightAchieved);
       this.handleCollision();
       this.bringOutTheDead();
+      if (this.stars.length > 0) {
+        this.highestStar = _.min(this.stars, function(s) {
+          return s.position.y;
+        });
+        _ref6 = this.view.dimensions(), w = _ref6[0], h = _ref6[1];
+        if (-((_ref7 = this.highestStar) != null ? _ref7.position.y : void 0) > this.heightAchieved) {
+          this.heightAchieved = -this.highestStar.position.y;
+        }
+        return this.view.scroll.y = Math.max(0, this.heightAchieved);
+      }
+    };
+
+    PlayState.prototype.transition = function() {
       if (this.stars.length === 0) {
-        return this.game.popState();
+        return this.game.pushState(new GameOverState);
       }
     };
 
@@ -1401,8 +1459,7 @@
       var _this = this;
       this.view.clearScreen('blue');
       this.view.draw(function(ctx) {
-        var box, renderables, t, _i, _j, _k, _l, _len, _len1, _len2, _len3, _len4, _len5, _m, _n, _ref1, _ref2, _ref3, _ref4, _ref5, _ref6, _results;
-        renderables = _this.novae.concat(_this.obstacles.concat(_this.clouds.concat(_this.stars.concat(_this.branches))));
+        var box, t, _i, _j, _k, _l, _len, _len1, _len2, _len3, _len4, _len5, _m, _n, _ref1, _ref2, _ref3, _ref4, _ref5, _ref6, _results;
         _ref1 = _this.novae;
         for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
           t = _ref1[_i];
@@ -1552,6 +1609,25 @@
       _ref1 = GameOverState.__super__.constructor.apply(this, arguments);
       return _ref1;
     }
+
+    GameOverState.prototype.enter = function() {};
+
+    GameOverState.prototype.exit = function() {};
+
+    GameOverState.prototype.update = function(dt) {
+      var t, _i, _len, _ref2, _results;
+      _ref2 = this.parent.novae;
+      _results = [];
+      for (_i = 0, _len = _ref2.length; _i < _len; _i++) {
+        t = _ref2[_i];
+        _results.push(t.update(dt * Config.gameOverSlowdown));
+      }
+      return _results;
+    };
+
+    GameOverState.prototype.render = function(ctx) {
+      return this.parent.render(ctx);
+    };
 
     return GameOverState;
 

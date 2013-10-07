@@ -13,17 +13,17 @@ Config =
 	# GENERAL
 	mainFont: 'Monoton'
 	hudFont: 'Offside'
-	debugDraw: true 			# draw AABBs around Collidables
+	debugDraw: false 			# draw AABBs around Collidables
 
 	
 	# BRANCHES + STARS
 	starSpeed: 15 				# normal speed
-	starHyperSpeed: 18 			# speed while left mousedown
+	starHyperSpeed: 25 			# speed while left mousedown
 	autoFork: true 				# form after branchDistanceMax
 	branchAngle: Math.PI / 6 	# deviation from path, radians
 	branchAngleUpwardWeight: 0.1 # add a small component of upwards direction
-	branchDistanceMin: 100 	# player can initiate fork after this tis distance
-	branchDistanceMax: 300		# any branch longer than this will be forked
+	# branchDistanceMin: 100 	# player can initiate fork after this tis distance
+	branchDistanceMax: 3000		# any branch longer than this will be forked
 	branchFibers: 3 			# how many line strings to use to draw the branch
 	branchWidth: 10 			# how wide, total, is the branch
 	knotSpacing: 100 			# how far to travel before adding a knot
@@ -32,11 +32,13 @@ Config =
 
 	starRadius: 16
 	starInnerRadius: 8
-	starNovaRadius: 32 				# how big to draw a dead star marker
-	starNovaMaxRadius: 320 			# unused, time to animate star death in seconds
 	starSafetyDistance: 128 		# how far a star can travel before it becomes collidable.  
 									#	 used to prevent immediate annihilation of new branches
 
+	novaMaxRadius: 2000 		# when to kill a nova
+	novaExplosionSpeed: 200 	# pixels per second
+
+	gameOverSlowdown: 1.0
 
 	# WINDOW
 	autokillDistanceRatio: 1.25  # kill any stars that are further from the highest star by this ratio of "screen size"

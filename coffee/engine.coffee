@@ -141,10 +141,17 @@ class Thing
 
 
 GFX =
-	drawLineString: (ctx, points, more...) ->
+	drawLineString: (ctx, points, opts={}) ->
+		{closed, more} = _.defaults opts,
+			closed: false
+			more: []
+		ctx.beginPath()
 		ctx.moveTo points[0].x, points[0].y
 		for vec in points[1..]
 			ctx.lineTo vec.x, vec.y
+		if closed
+			for vec in points[0..1]
+				ctx.lineTo vec.x, vec.y
 		for vec in more
 			ctx.lineTo vec.x, vec.y
 
@@ -248,7 +255,7 @@ class Viewport
 
 class GameState
 
-	_timesPushed: 0
+	_isInitialized: false
 	_boundEvents: null
 
 	game: null  # this is set when being pushed onto a GameEngine and cleared when being popped
@@ -284,7 +291,7 @@ class GameState
 class GameEngine
 
 	canvas: null
-	mouse: null
+	mouse: {}
 
 	config: null
 	states: null
@@ -293,7 +300,10 @@ class GameEngine
 
 	constructor: (opts) ->
 		@states = []
-		@mouse = new Vec 0, 0
+		@mouse = 
+			position: new Vec 0, 0
+			leftButton: false
+			rightButton: false
 		
 		@config = _.defaults opts,
 			fps: 30
@@ -325,6 +335,9 @@ class GameEngine
 	pushState: (state) -> 
 		state.game = this
 		state.parent = @currentState()
+		if not state._isInitialized
+			state.initialize?(game)
+			state._isInitialized = true
 		@states.push state
 		state._bindEvents()
 		state.enter()
@@ -338,7 +351,7 @@ class GameEngine
 		state
 
 	doLoop: (dt) ->
-		# console.debug 'tick'
+		# console.debug 'tick', dt
 		state = @currentState()
 		throw 'not a state' if not state instanceof GameState
 		@preUpdate?()
@@ -347,6 +360,7 @@ class GameEngine
 		@preRender?()
 		state.render()
 		@postRender?()
+		state.transition?()
 
 	togglePanic: ->
 		if @intervals.gameLoop?
@@ -364,8 +378,18 @@ class GameEngine
 					@canvas.mozRequestFullScreen()
 
 		$(@canvas).on 'mousemove', (e) =>
-			@mouse.x = e.offsetX or e.layerX
-			@mouse.y = e.offsetY or e.layerY
+			@mouse.position.x = e.offsetX or e.layerX
+			@mouse.position.y = e.offsetY or e.layerY
+		
+		$(@canvas).on 'mousedown', (e) =>
+			switch e.which
+				when 1 then @mouse.leftButton = true
+				when 3 then @mouse.rightButton = true
+
+		$(@canvas).on 'mouseup', (e) =>
+			switch e.which
+				when 1 then @mouse.leftButton = false
+				when 3 then @mouse.rightButton = false
 		
 		# prevent right click action
 		$(@canvas).on 'contextmenu', (e) =>

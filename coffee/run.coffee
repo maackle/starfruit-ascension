@@ -5,6 +5,7 @@ do ->
 	numRainbowColors = 256
 	rainbowColors = 
 		(tinycolor("hsv(#{p * 100 / numRainbowColors}%, 50%, 100%)").toRgbString() for p in [0..numRainbowColors])
+		
 	window.rainbow = (factor=1) ->
 		rainbowColors[(globals.rainbowIndex * factor) % rainbowColors.length]
 

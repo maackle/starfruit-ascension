@@ -64,8 +64,9 @@ class Star extends Collidable
 	isDead: false
 	branch: null
 	angle: -Math.PI / 2
+	attraction: null
 
-	constructor: (@position,  @angle) ->
+	constructor: (@position, @angle) ->
 		@id = Star.nextID++
 		@qbox = new QuadtreeBox
 			position: @position
@@ -73,9 +74,7 @@ class Star extends Collidable
 			offset: new Vec Star.radius, Star.radius
 			object: this
 
-	attraction: -> null
-
-	speed: -> Config.starSpeed
+	speed: -> if @attraction? then Config.starHyperSpeed else Config.starSpeed
 
 	velocity: -> Vec.polar @speed(), @angle
 
@@ -86,8 +85,8 @@ class Star extends Collidable
 		@branch.star = null
 
 	update: ->
-		if @attraction()
-			diff = new Vec @attraction()
+		if @attraction?
+			diff = new Vec @attraction
 			diff.sub @position
 			a = clampAngleSigned @angle
 			da = clampAngleSigned(diff.angle() - a)
@@ -164,7 +163,7 @@ class Branch extends Thing
 
 	render: (ctx) ->
 		ctx.beginPath()
-		GFX.drawLineString ctx, @knots, @tip
+		GFX.drawLineString ctx, @knots, more: [@tip]
 		ctx.lineWidth = Config.branchWidth
 		ctx.strokeStyle = rainbow()
 		ctx.fillStyle = rainbow()
@@ -199,9 +198,9 @@ class Nova extends Thing
 		@time = 0
 
 	update: (dt)->
-		@scale += 10 * dt
+		@scale += dt * Config.novaExplosionSpeed
 		@time += dt
-		if @radius() > Config.starNovaMaxRadius
+		if @radius() > Config.novaMaxRadius
 			@die()
 
 	radius: -> Star.radius * @scale
@@ -212,7 +211,7 @@ class Nova extends Thing
 		@withTransform ctx, =>
 			ctx.beginPath()
 			ctx.lineWidth = 2
-			GFX.drawLineString ctx, Star.vertices
+			GFX.drawLineString ctx, Star.vertices, closed: true
 			ctx.strokeStyle = rainbow(10)
 			ctx.stroke()
 

@@ -17,7 +17,6 @@ class PlayState extends GameState
 	constructor: ->
 		numRainbowColors = 256
 		@rainbowColors = (tinycolor("hsv(#{p * 100 / numRainbowColors}%, 50%, 100%)").toRgbString() for p in [0..numRainbowColors])
-		@initialize()
 
 	initialize: ->
 		# @obstacles.push new Cookie(new Vec(0,0), new Vec(1, 0))
@@ -29,6 +28,7 @@ class PlayState extends GameState
 		branch = new Branch(new Vec 0, 0)
 		branch.setStar(star)
 		@branches.push branch
+
 
 	enter: ->
 		@view ?= new Viewport @game.canvas,
@@ -44,8 +44,12 @@ class PlayState extends GameState
 		t.update(dt) for t in @novae
 		t.update(dt) for t in @obstacles
 		t.update(dt) for t in @clouds
-		
+
 		for star in @stars
+			if @game.mouse.leftButton
+				star.attraction = @view.screen2world @game.mouse.position
+			else
+				star.attraction = null
 			star.update(dt)
 			branch = star.branch
 			if Config.autoFork and branch.forkable()
@@ -68,25 +72,23 @@ class PlayState extends GameState
 			if branch.highestAltitude < -viewBottom
 				branch.die()
 
-		@highestStar = _.min @stars, (s) -> s.position.y
-		
-		[w, h] = @view.dimensions()
-		@heightAchieved = -@highestStar.position.y if -@highestStar?.position.y > @heightAchieved
-		@view.scroll.y = Math.max 0, @heightAchieved
-
 		@handleCollision()
 		@bringOutTheDead()
 
-		# console.log @stars.length, @branches.length, @novae.length
+		if @stars.length > 0
+			@highestStar = _.min @stars, (s) -> s.position.y
+			[w, h] = @view.dimensions()
+			@heightAchieved = -@highestStar.position.y if -@highestStar?.position.y > @heightAchieved
+			@view.scroll.y = Math.max 0, @heightAchieved
 
+
+	transition: ->
 		if @stars.length == 0
-			@game.popState()
-
+			@game.pushState new GameOverState
 
 	render: (ctx) ->
 		@view.clearScreen('blue')
 		@view.draw (ctx) =>
-			renderables = @novae.concat @obstacles.concat @clouds.concat @stars.concat @branches
 			t.render(ctx) for t in @novae
 			t.render(ctx) for t in @branches
 			t.render(ctx) for t in @stars
@@ -141,4 +143,15 @@ class PlayState extends GameState
 		@novae.push new Nova star
 		star.die()
 
+
 class GameOverState extends GameState
+
+	enter: ->
+
+	exit: ->
+
+	update: (dt) ->
+		t.update(dt * Config.gameOverSlowdown) for t in @parent.novae
+
+	render: (ctx) ->
+		@parent.render(ctx)
