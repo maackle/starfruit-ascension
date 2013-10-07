@@ -91,9 +91,11 @@ class Quad
 		width: @w
 		height: @h
 
-	hitTest: (vec) ->
+	onPoint: (vec) ->
 		vec.x >= @x and vec.y >= @y and vec.x <= @x + @w and vec.y <= @y + @h
 
+	onQuad: (q) ->
+		not (@x > q.x+q.w || @x+@w < q.x || @y > q.y+q.h || @y+@h < q.y)
 
 class ImageResource
 

@@ -39,6 +39,8 @@ class QuadtreeBox
 		@left = x - @offset.x
 		@top = y - @offset.y
 
+	quad: -> new Quad @left, @top, @width, @height
+
 	getHits: (quadtree) ->
 		quadtree.getObjects @left, @top, @width, @height
 
@@ -81,7 +83,7 @@ class Star extends Collidable
 
 	die: -> 
 		@isDead = true
-		delete @branch.star
+		@branch.star = null
 
 	update: ->
 		if @attraction()
@@ -171,7 +173,7 @@ class Branch extends Thing
 
 	doKnot: ->
 		@knots.push new Vec @tip
-		@angle += (Math.random() - 0.5) * Config.knotAngleJitter
+		@star?.angle += (Math.random() - 0.5) * Config.knotAngleJitter
 		@lastKnotDistance = @distanceTravelled
 		@highestAltitude = -@tip.y if -@tip.y > @highestAltitude
 

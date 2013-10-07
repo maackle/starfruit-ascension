@@ -250,8 +250,12 @@
       };
     };
 
-    Quad.prototype.hitTest = function(vec) {
+    Quad.prototype.onPoint = function(vec) {
       return vec.x >= this.x && vec.y >= this.y && vec.x <= this.x + this.w && vec.y <= this.y + this.h;
+    };
+
+    Quad.prototype.onQuad = function(q) {
+      return !(this.x > q.x + q.w || this.x + this.w < q.x || this.y > q.y + q.h || this.y + this.h < q.y);
     };
 
     return Quad;
@@ -834,6 +838,10 @@
       return this.top = y - this.offset.y;
     };
 
+    QuadtreeBox.prototype.quad = function() {
+      return new Quad(this.left, this.top, this.width, this.height);
+    };
+
     QuadtreeBox.prototype.getHits = function(quadtree) {
       return quadtree.getObjects(this.left, this.top, this.width, this.height);
     };
@@ -908,7 +916,7 @@
 
     Star.prototype.die = function() {
       this.isDead = true;
-      return delete this.branch.star;
+      return this.branch.star = null;
     };
 
     Star.prototype.update = function() {
@@ -1036,8 +1044,11 @@
     };
 
     Branch.prototype.doKnot = function() {
+      var _ref1;
       this.knots.push(new Vec(this.tip));
-      this.angle += (Math.random() - 0.5) * Config.knotAngleJitter;
+      if ((_ref1 = this.star) != null) {
+        _ref1.angle += (Math.random() - 0.5) * Config.knotAngleJitter;
+      }
       this.lastKnotDistance = this.distanceTravelled;
       if (-this.tip.y > this.highestAltitude) {
         return this.highestAltitude = -this.tip.y;
@@ -1304,10 +1315,6 @@
 
     PlayState.prototype.initialize = function() {
       var branch, star;
-      this.obstacles.push(new Cookie(new Vec(0, 0), new Vec(1, 0)));
-      this.obstacles.push(new Satellite(new Vec(-100, 0), new Vec(1, 0)));
-      this.obstacles.push(new Cloud(new Vec(-100, -100), new Vec(1, 0)));
-      this.obstacles.push(new Balloon(new Vec(-100, -100), new Vec(1, 0)));
       star = new Star(new Vec(0, 0), -Math.PI / 2);
       this.stars.push(star);
       branch = new Branch(new Vec(0, 0));
@@ -1385,7 +1392,6 @@
       this.view.scroll.y = Math.max(0, this.heightAchieved);
       this.handleCollision();
       this.bringOutTheDead();
-      console.log(this.stars.length, this.branches.length, this.novae.length);
       if (this.stars.length === 0) {
         return this.game.popState();
       }
@@ -1490,7 +1496,7 @@
     };
 
     PlayState.prototype.handleCollision = function(objects) {
-      var alreadyHandled, hits, star, viewQuad, _i, _len, _ref1, _results,
+      var alreadyHandled, hit, hits, rawhits, star, viewQuad, _i, _len, _ref1, _results,
         _this = this;
       alreadyHandled = [];
       viewQuad = this.view.worldQuad();
@@ -1499,17 +1505,31 @@
       for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
         star = _ref1[_i];
         if (!star.isDead) {
-          if (!viewQuad.hitTest(star.position)) {
+          if (!viewQuad.onQuad(star.qbox.quad())) {
             _results.push(this.killStar(star));
-          } else {
-            hits = star.qbox.getHits(this.quadtree).filter(function(h) {
-              return h.object !== star && !(h.object instanceof Star && h.object.isDead);
+          } else if (!star.isSafe()) {
+            rawhits = star.qbox.getHits(this.quadtree);
+            hits = rawhits.filter(function(h) {
+              return !star.isDead && h.object !== star && h.quad().onQuad(star.qbox.quad());
             });
-            if (hits.length > 1) {
-              _results.push(this.killStar(star));
+            if (hits.length > 0) {
+              this.killStar(star);
+              _results.push((function() {
+                var _j, _len1, _results1;
+                _results1 = [];
+                for (_j = 0, _len1 = hits.length; _j < _len1; _j++) {
+                  hit = hits[_j];
+                  if (hit.object instanceof Star) {
+                    _results1.push(this.killStar(hit.object));
+                  }
+                }
+                return _results1;
+              }).call(this));
             } else {
               _results.push(void 0);
             }
+          } else {
+            _results.push(void 0);
           }
         }
       }

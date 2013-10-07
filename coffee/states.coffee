@@ -20,10 +20,10 @@ class PlayState extends GameState
 		@initialize()
 
 	initialize: ->
-		@obstacles.push new Cookie(new Vec(0,0), new Vec(1, 0))
-		@obstacles.push new Satellite(new Vec(-100,0), new Vec(1, 0))
-		@obstacles.push new Cloud(new Vec(-100,-100), new Vec(1, 0))
-		@obstacles.push new Balloon(new Vec(-100,-100), new Vec(1, 0))
+		# @obstacles.push new Cookie(new Vec(0,0), new Vec(1, 0))
+		# @obstacles.push new Satellite(new Vec(-100,0), new Vec(1, 0))
+		# @obstacles.push new Cloud(new Vec(-100,-100), new Vec(1, 0))
+		# @obstacles.push new Balloon(new Vec(-100,-100), new Vec(1, 0))
 		star = new Star (new Vec 0, 0), -Math.PI / 2
 		@stars.push star
 		branch = new Branch(new Vec 0, 0)
@@ -77,7 +77,7 @@ class PlayState extends GameState
 		@handleCollision()
 		@bringOutTheDead()
 
-		console.log @stars.length, @branches.length, @novae.length
+		# console.log @stars.length, @branches.length, @novae.length
 
 		if @stars.length == 0
 			@game.popState()
@@ -121,13 +121,18 @@ class PlayState extends GameState
 		alreadyHandled = []
 		viewQuad = @view.worldQuad()
 		for star in @stars when not star.isDead
-			if not viewQuad.hitTest star.position
+			if not viewQuad.onQuad star.qbox.quad()
 				@killStar star
-			else
-				hits = star.qbox.getHits(@quadtree).filter (h) =>
-					h.object != star and not (h.object instanceof Star and h.object.isDead)
-				if hits.length > 1
+			else if not star.isSafe()
+				rawhits = star.qbox.getHits(@quadtree)
+				hits = rawhits.filter (h) =>
+					not star.isDead and h.object != star and h.quad().onQuad star.qbox.quad() # and not (h.object instanceof Star and h.object.isDead)
+				# console.log star.position, (hits.map (h) => h.object.position) if hits.length > 0
+				# console.log star.qbox, (hits.map (h) => h) if hits.length > 0
+				if hits.length > 0
 					@killStar star
+					for hit in hits when hit.object instanceof Star
+						@killStar hit.object
 			# for hit in hits when hit.object instanceof Star and not hit.object.isDead
 			# 	@killStar hit.object
 
