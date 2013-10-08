@@ -1,5 +1,5 @@
 (function() {
-  var Atmosphere, Balloon, Branch, Cloud, Collidable, Config, Cookie, GFX, GameEngine, GameOverState, GameState, ImageResource, M, Module, NotImplemented, Nova, Obstacle, PlayState, Quad, QuadtreeBox, Satellite, Sprite, Star, Thing, Vec, Viewport, atmoscale, clampAngleSigned, globals, i, lerp, makeImage, withImage, withImages, _ref, _ref1,
+  var Atmosphere, Balloon, Branch, Cloud, Collidable, Config, Cookie, GFX, GameEngine, GameOverState, GameState, ImageResource, M, Module, NotImplemented, Nova, Obstacle, PlasmaCloud, PlayState, Powerup, Quad, QuadtreeBox, Satellite, Sprite, Star, Thing, Vec, Viewport, atmoscale, clampAngleSigned, globals, i, lerp, makeImage, withImage, withImages, _ref, _ref1,
     __slice = [].slice,
     __indexOf = [].indexOf || function(item) { for (var i = 0, l = this.length; i < l; i++) { if (i in this && this[i] === item) return i; } return -1; },
     __hasProp = {}.hasOwnProperty,
@@ -271,6 +271,8 @@
 
     ImageResource.prototype.loaded = false;
 
+    ImageResource.prototype._callbacks = [];
+
     function ImageResource(o) {
       var hit, im,
         _this = this;
@@ -285,13 +287,29 @@
           im = new Image;
           im.src = o;
           im.onload = function() {
-            return _this.loaded = true;
+            var cb, _i, _len, _ref, _results;
+            _this.loaded = true;
+            _ref = _this._callbacks;
+            _results = [];
+            for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+              cb = _ref[_i];
+              _results.push(cb(_this));
+            }
+            return _results;
           };
           ImageResource._cache[0] = im;
         }
       }
       this.image = im;
     }
+
+    ImageResource.prototype["with"] = function(cb) {
+      if (this.loaded) {
+        return cb(this);
+      } else {
+        return this._callbacks.push(cb);
+      }
+    };
 
     return ImageResource;
 
@@ -378,8 +396,19 @@
     Sprite.prototype.image = null;
 
     function Sprite(_arg) {
-      this.image = _arg.image, this.offset = _arg.offset;
+      this.image = _arg.image, this.offset = _arg.offset, this.canvas = _arg.canvas;
+      if (this.image && this.canvas) {
+        console.warn("shouldn't set both image and canvas of Sprite");
+      }
     }
+
+    Sprite.prototype.source = function() {
+      if (this.image) {
+        return this.image.image;
+      } else {
+        return this.canvas;
+      }
+    };
 
     Sprite.prototype.draw = function(transform) {
       var _this = this;
@@ -396,7 +425,7 @@
         if (scale != null) {
           ctx.scale(scale);
         }
-        ctx.drawImage(_this.image.image, -_this.offset.x, -_this.offset.y);
+        ctx.drawImage(_this.source(), -_this.offset.x, -_this.offset.y);
         return ctx.restore();
       };
     };
@@ -794,11 +823,11 @@
   Config = {
     mainFont: 'Monoton',
     hudFont: 'Offside',
-    debugDraw: false,
+    debugDraw: true,
+    autoFork: false,
     starSpeed: 550,
     starHyperSpeed: 700,
-    autoFork: true,
-    branchAngle: Math.PI / 4,
+    branchAngle: Math.PI / 5,
     branchAngleUpwardWeight: 0.1,
     branchDistanceMax: 2000,
     branchFibers: 3,
@@ -984,6 +1013,8 @@
 
     Star.prototype.attraction = null;
 
+    Star.prototype.queue = null;
+
     Star.prototype.timers = null;
 
     function Star(position, angle) {
@@ -991,6 +1022,7 @@
       this.angle = angle;
       this.id = Star.nextID++;
       this.velocity = new Vec(0, 0);
+      this.queue = [];
       this.qbox = new QuadtreeBox({
         position: this.position,
         dimensions: [Star.radius * 2, Star.radius * 2],
@@ -1008,6 +1040,10 @@
 
     Star.prototype.isSafe = function() {
       return this.branch.distanceTravelled < Config.starSafetyDistance;
+    };
+
+    Star.prototype.tell = function(msg) {
+      return this.queue.push(msg);
     };
 
     Star.prototype.die = function() {
@@ -1401,13 +1437,87 @@
 
   })(Obstacle);
 
-  Balloon.spriteImage = Config.images.balloon;
+  Powerup = (function(_super) {
+    __extends(Powerup, _super);
 
-  Cloud.spriteImage = Config.images.cloud;
+    function Powerup(position) {
+      this.position = position;
+    }
+
+    return Powerup;
+
+  })(Collidable);
+
+  PlasmaCloud = (function(_super) {
+    __extends(PlasmaCloud, _super);
+
+    function PlasmaCloud(position, velocity) {
+      this.position = position;
+      this.velocity = velocity;
+      this._blessed = [];
+      if (this.velocity == null) {
+        this.velocity = new Vec(0, 0);
+      }
+      this.sprite = new Sprite({
+        canvas: PlasmaCloud.canvas,
+        offset: new Vec(128 / 2, 90 / 2)
+      });
+      this.qbox = new QuadtreeBox({
+        position: this.position,
+        offset: new Vec(128 / 2, 90 / 2),
+        dimensions: [128, 90],
+        object: this
+      });
+    }
+
+    PlasmaCloud.update = function() {
+      var canvas, ctx;
+      canvas = PlasmaCloud.canvas;
+      ctx = canvas.getContext('2d');
+      ctx.globalCompositeOperation = 'copy';
+      ctx.fillStyle = rainbow();
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.globalCompositeOperation = 'destination-in';
+      return ctx.drawImage(Cloud.spriteImage.image, 0, 0);
+    };
+
+    PlasmaCloud.prototype.update = function() {
+      this.position.add(this.velocity);
+      return PlasmaCloud.__super__.update.apply(this, arguments);
+    };
+
+    PlasmaCloud.prototype.render = function(ctx) {
+      return this.sprite.draw({
+        position: this.position
+      })(ctx);
+    };
+
+    PlasmaCloud.prototype.bless = function(star) {
+      if (__indexOf.call(this._blessed, star) < 0 && !star.isSafe()) {
+        star.tell('fork');
+        return this._blessed.push(star);
+      }
+    };
+
+    return PlasmaCloud;
+
+  })(Powerup);
+
+  Balloon.spriteImage = Config.images.balloon;
 
   Cookie.spriteImage = Config.images.cookie;
 
   Satellite.spriteImage = Config.images.satellite;
+
+  Cloud.spriteImage = Config.images.cloud;
+
+  Cloud.spriteImage["with"](function(cloud) {
+    var canvas;
+    canvas = document.createElement('canvas');
+    canvas.width = cloud.image.width;
+    canvas.height = cloud.image.height;
+    return PlasmaCloud.canvas = canvas;
+  });
 
   PlayState = (function(_super) {
     __extends(PlayState, _super);
@@ -1423,6 +1533,8 @@
     PlayState.prototype.quadtree = Quadtree.create(1000, 100000);
 
     PlayState.prototype.multiplier = 1;
+
+    PlayState.prototype.powerups = null;
 
     PlayState.prototype.obstacles = null;
 
@@ -1445,6 +1557,7 @@
         }
         return _results;
       })();
+      this.powerups = [];
       this.obstacles = [];
       this.clouds = [];
       this.novae = [];
@@ -1476,7 +1589,7 @@
     PlayState.prototype.exit = function() {};
 
     PlayState.prototype.update = function(dt) {
-      var branch, h, left, newStar, right, star, t, viewBottom, w, _i, _j, _k, _l, _len, _len1, _len2, _len3, _len4, _m, _ref1, _ref2, _ref3, _ref4, _ref5, _ref6, _ref7;
+      var branch, h, star, t, viewBottom, w, _i, _j, _k, _l, _len, _len1, _len2, _len3, _len4, _len5, _len6, _m, _n, _o, _ref1, _ref2, _ref3, _ref4, _ref5, _ref6, _ref7, _ref8, _ref9;
       this.quadtree.reset();
       _ref1 = this.novae;
       for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
@@ -1488,15 +1601,21 @@
         t = _ref2[_j];
         t.update(dt);
       }
-      _ref3 = this.clouds;
+      _ref3 = this.powerups;
       for (_k = 0, _len2 = _ref3.length; _k < _len2; _k++) {
         t = _ref3[_k];
         t.update(dt);
       }
-      this.addObstacles(dt);
-      _ref4 = this.stars;
+      _ref4 = this.clouds;
       for (_l = 0, _len3 = _ref4.length; _l < _len3; _l++) {
-        star = _ref4[_l];
+        t = _ref4[_l];
+        t.update(dt);
+      }
+      PlasmaCloud.update(dt);
+      this.addObstacles(dt);
+      _ref5 = this.stars;
+      for (_m = 0, _len4 = _ref5.length; _m < _len4; _m++) {
+        star = _ref5[_m];
         if (this.game.mouse.leftButton) {
           star.attraction = this.view.screen2world(this.game.mouse.position);
         } else {
@@ -1505,29 +1624,24 @@
         star.update(dt);
         branch = star.branch;
         if (Config.autoFork && branch.forkable()) {
-          left = new Branch(branch);
-          right = new Branch(branch);
-          newStar = new Star(new Vec(branch.tip), star.angle);
-          left.setStar(newStar);
-          right.setStar(star);
-          newStar.angle -= Config.branchAngle;
-          star.angle += Config.branchAngle;
-          this.stars.push(newStar);
-          branch.stop();
-          this.branches.push(left);
-          this.branches.push(right);
+          star.tell('fork');
         }
       }
       this.handleCollision();
       this.bringOutTheDead();
+      _ref6 = this.stars;
+      for (_n = 0, _len5 = _ref6.length; _n < _len5; _n++) {
+        star = _ref6[_n];
+        this.processQueue(star);
+      }
       $('body').css({
         'background-position': "0 " + (this.heightAchieved / 10) + "px"
       });
       if (this.stars.length > 0) {
         viewBottom = this.view.worldQuad().bottom();
-        _ref5 = this.branches;
-        for (_m = 0, _len4 = _ref5.length; _m < _len4; _m++) {
-          branch = _ref5[_m];
+        _ref7 = this.branches;
+        for (_o = 0, _len6 = _ref7.length; _o < _len6; _o++) {
+          branch = _ref7[_o];
           branch.update(dt);
           if ((branch.star == null) && branch.highestAltitude < -viewBottom) {
             branch.die();
@@ -1536,8 +1650,8 @@
         this.highestStar = _.min(this.stars, function(s) {
           return s.position.y;
         });
-        _ref6 = this.view.dimensions(), w = _ref6[0], h = _ref6[1];
-        if (-((_ref7 = this.highestStar) != null ? _ref7.position.y : void 0) > this.heightAchieved) {
+        _ref8 = this.view.dimensions(), w = _ref8[0], h = _ref8[1];
+        if (-((_ref9 = this.highestStar) != null ? _ref9.position.y : void 0) > this.heightAchieved) {
           this.heightAchieved = -this.highestStar.position.y;
         }
         this.view.scroll.y = Math.max(0, this.heightAchieved);
@@ -1664,6 +1778,9 @@
         return new klass(randomSpotOffscreen(klass.spriteImage.image.height), vel);
       };
       prob(Config.probability.cloud, function() {
+        return _this.powerups.push(new PlasmaCloud(randomSpotOffscreen(PlasmaCloud.canvas.height), new Vec(_.random(0, 0.1), 0)));
+      });
+      prob(Config.probability.cloud, function() {
         return _this.clouds.push(make(Cloud, new Vec(_.random(2, 5), 0)));
       });
       return prob(Config.probability.balloon, function() {
@@ -1721,7 +1838,7 @@
     };
 
     PlayState.prototype.handleCollision = function(objects) {
-      var alreadyHandled, deathQuad, hit, hits, ob, obstacles, rawhits, s, star, stargroup, _i, _j, _k, _len, _len1, _len2, _ref1, _ref2, _results,
+      var alreadyHandled, deathQuad, hit, hits, ob, obstacles, p, powerups, rawhits, s, star, stargroup, _i, _j, _k, _l, _len, _len1, _len2, _len3, _len4, _len5, _len6, _m, _n, _o, _ref1, _ref2, _ref3, _ref4, _results,
         _this = this;
       alreadyHandled = [];
       deathQuad = this.deathQuad();
@@ -1737,12 +1854,23 @@
               return h.object !== star && h.quad().onQuad(star.qbox.quad());
             });
             if (hits.length > 0) {
+              powerups = (function() {
+                var _j, _len1, _results;
+                _results = [];
+                for (_j = 0, _len1 = hits.length; _j < _len1; _j++) {
+                  hit = hits[_j];
+                  if (hit.object instanceof Powerup) {
+                    _results.push(hit.object);
+                  }
+                }
+                return _results;
+              })();
               obstacles = (function() {
                 var _j, _len1, _results;
                 _results = [];
                 for (_j = 0, _len1 = hits.length; _j < _len1; _j++) {
                   hit = hits[_j];
-                  if (!(hit.object instanceof Star)) {
+                  if (hit.object instanceof Obstacle) {
                     _results.push(hit.object);
                   }
                 }
@@ -1760,11 +1888,18 @@
                 return _results;
               })();
               stargroup.push(star);
-              console.log(stargroup, obstacles);
               if (obstacles.length > 0) {
                 for (_j = 0, _len1 = stargroup.length; _j < _len1; _j++) {
                   s = stargroup[_j];
                   this.killStar(s);
+                }
+              } else if (powerups.length > 0) {
+                for (_k = 0, _len2 = powerups.length; _k < _len2; _k++) {
+                  p = powerups[_k];
+                  for (_l = 0, _len3 = stargroup.length; _l < _len3; _l++) {
+                    s = stargroup[_l];
+                    p.bless(s);
+                  }
                 }
               } else {
                 this.mergeStars(stargroup);
@@ -1774,17 +1909,28 @@
         }
       }
       _ref2 = this.obstacles;
+      for (_m = 0, _len4 = _ref2.length; _m < _len4; _m++) {
+        ob = _ref2[_m];
+        _ref3 = ob.qbox.getHits(this.quadtree);
+        for (_n = 0, _len5 = _ref3.length; _n < _len5; _n++) {
+          hit = _ref3[_n];
+          if (hit.object instanceof Star && !hit.object.isDead && hit.quad().onQuad(ob.qbox.quad())) {
+            this.killStar(hit.object);
+          }
+        }
+      }
+      _ref4 = this.powerups;
       _results = [];
-      for (_k = 0, _len2 = _ref2.length; _k < _len2; _k++) {
-        ob = _ref2[_k];
+      for (_o = 0, _len6 = _ref4.length; _o < _len6; _o++) {
+        p = _ref4[_o];
         _results.push((function() {
-          var _l, _len3, _ref3, _results1;
-          _ref3 = ob.qbox.getHits(this.quadtree);
+          var _len7, _p, _ref5, _results1;
+          _ref5 = p.qbox.getHits(this.quadtree);
           _results1 = [];
-          for (_l = 0, _len3 = _ref3.length; _l < _len3; _l++) {
-            hit = _ref3[_l];
-            if (hit.object instanceof Star && !hit.object.isDead && hit.quad().onQuad(ob.qbox.quad())) {
-              _results1.push(this.killStar(hit.object));
+          for (_p = 0, _len7 = _ref5.length; _p < _len7; _p++) {
+            hit = _ref5[_p];
+            if (hit.object instanceof Star && !hit.object.isDead && hit.quad().onQuad(p.qbox.quad())) {
+              _results1.push(p.bless(hit.object));
             } else {
               _results1.push(void 0);
             }
@@ -1793,6 +1939,32 @@
         }).call(this));
       }
       return _results;
+    };
+
+    PlayState.prototype.processQueue = function(star) {
+      var branch, cmd, left, newStar, right, _i, _len, _ref1;
+      if (star.queue.length > 0) {
+        _ref1 = star.queue;
+        for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
+          cmd = _ref1[_i];
+          switch (cmd) {
+            case 'fork':
+              branch = star.branch;
+              left = new Branch(branch);
+              right = new Branch(branch);
+              newStar = new Star(new Vec(branch.tip), star.angle);
+              left.setStar(newStar);
+              right.setStar(star);
+              newStar.angle -= Config.branchAngle;
+              star.angle += Config.branchAngle;
+              this.stars.push(newStar);
+              branch.stop();
+              this.branches.push(left);
+              this.branches.push(right);
+          }
+        }
+        return star.queue = [];
+      }
     };
 
     PlayState.prototype.deathQuad = function() {
@@ -1814,7 +1986,6 @@
       highest = _.max(stars, function(s) {
         return -s.position.y;
       });
-      console.log('merge', highest);
       _ref1 = _.without(stars, highest);
       _results = [];
       for (_i = 0, _len = _ref1.length; _i < _len; _i++) {

@@ -13,14 +13,14 @@ Config =
 	# GENERAL
 	mainFont: 'Monoton'
 	hudFont: 'Offside'
-	debugDraw: false 			# draw AABBs around Collidables
+	debugDraw: yes 			# draw AABBs around Collidables
+	autoFork: no 				# fork after branchDistanceMax
 
 	
 	# BRANCHES + STARS
 	starSpeed: 550 				# normal speed
 	starHyperSpeed: 700 			# speed while left mousedown
-	autoFork: true 				# form after branchDistanceMax
-	branchAngle: Math.PI / 4 	# deviation from path, radians
+	branchAngle: Math.PI / 5 	# deviation from path, radians
 	branchAngleUpwardWeight: 0.1 	# adds a small component of upwards direction
 	# branchDistanceMin: 100 	# player can initiate fork after this tis distance
 	branchDistanceMax: 2000		# any branch longer than this will be forked

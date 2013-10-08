@@ -103,6 +103,7 @@ class ImageResource
 	@_cache: {}
 	image: null
 	loaded: false
+	_callbacks: []
 
 	constructor: (o) ->
 		console.assert o?
@@ -115,9 +116,17 @@ class ImageResource
 			else
 				im = new Image
 				im.src = o
-				im.onload = => @loaded = true
+				im.onload = => 
+					@loaded = true
+					cb(this) for cb in @_callbacks
 				ImageResource._cache[0] = im
 		@image = im
+
+	with: (cb) ->
+		if @loaded
+			cb(this)
+		else
+			@_callbacks.push cb
 
 
 
@@ -170,7 +179,11 @@ class Sprite
 	offset: null
 	image: null
 
-	constructor: ({@image, @offset}) ->
+	constructor: ({@image, @offset, @canvas}) ->
+		console.warn "shouldn't set both image and canvas of Sprite" if @image and @canvas
+
+	source: -> 
+		if @image then @image.image else @canvas
 
 	draw: (transform) -> (ctx) =>
 		{position, rotation, scale} = transform
@@ -178,7 +191,7 @@ class Sprite
 		ctx.translate position.x, position.y if position?
 		ctx.rotate rotation if rotation?
 		ctx.scale scale if scale?
-		ctx.drawImage @image.image, - @offset.x, - @offset.y
+		ctx.drawImage @source(), - @offset.x, - @offset.y
 		ctx.restore()
 
 

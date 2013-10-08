@@ -65,12 +65,14 @@ class Star extends Collidable
 	branch: null
 	angle: -Math.PI / 2
 	attraction: null
+	queue: null
 
 	timers: null
 
 	constructor: (@position, @angle) ->
 		@id = Star.nextID++
 		@velocity = new Vec 0, 0
+		@queue = []
 		@qbox = new QuadtreeBox
 			position: @position
 			dimensions: [Star.radius*2, Star.radius*2]
@@ -83,8 +85,11 @@ class Star extends Collidable
 
 	isSafe: -> @branch.distanceTravelled < Config.starSafetyDistance
 
+	tell: (msg) ->
+		@queue.push msg
+
 	die: -> 
-		@isDead = true
+		@isDead = true  # TODO: just add this to the queue
 		@branch.star = null
 
 	merge: (star) ->
@@ -344,7 +349,54 @@ class Satellite extends Obstacle
 		@sprite.draw(position: @position, rotation: @angle)(ctx)
 
 
+class Powerup extends Collidable
+
+	constructor: (@position) ->
+
+
+class PlasmaCloud extends Powerup
+
+	constructor: (@position, @velocity) ->
+		@_blessed = []
+		@velocity ?= new Vec 0, 0
+		@sprite = new Sprite
+			canvas: PlasmaCloud.canvas
+			offset: new Vec 128/2, 90/2
+		@qbox = new QuadtreeBox
+			position: @position
+			offset: new Vec 128/2, 90/2
+			dimensions: [128, 90]
+			object: this
+
+	@update: ->
+		canvas = PlasmaCloud.canvas
+		ctx = canvas.getContext '2d'
+		ctx.globalCompositeOperation = 'copy'
+		ctx.fillStyle = rainbow()
+		ctx.fillRect 0, 0, canvas.width, canvas.height
+		ctx.globalCompositeOperation = 'destination-in'
+		ctx.drawImage Cloud.spriteImage.image, 0, 0
+
+	update: ->
+		@position.add @velocity
+		super
+
+	render: (ctx) ->  # assuming all Obstacles have Sprites
+		@sprite.draw(position: @position)(ctx)
+
+	bless: (star) ->
+		if star not in @_blessed and not star.isSafe()
+			star.tell 'fork'
+			@_blessed.push star
+
+
 Balloon.spriteImage = Config.images.balloon
-Cloud.spriteImage = Config.images.cloud
 Cookie.spriteImage = Config.images.cookie
 Satellite.spriteImage = Config.images.satellite
+Cloud.spriteImage = Config.images.cloud
+
+Cloud.spriteImage.with (cloud) ->
+	canvas = document.createElement('canvas')
+	canvas.width  = cloud.image.width
+	canvas.height = cloud.image.height
+	PlasmaCloud.canvas = canvas

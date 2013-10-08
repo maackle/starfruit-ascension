@@ -9,6 +9,7 @@ class PlayState extends GameState
 	quadtree: Quadtree.create(1000, 100000)
 	multiplier: 1
 
+	powerups: null
 	obstacles: null
 	clouds: null
 	novae: null
@@ -19,6 +20,7 @@ class PlayState extends GameState
 		numRainbowColors = 256
 		@rainbowColors = (tinycolor("hsv(#{p * 100 / numRainbowColors}%, 50%, 100%)").toRgbString() for p in [0..numRainbowColors])
 
+		@powerups = []
 		@obstacles = []
 		@clouds = []
 		@novae = []
@@ -45,7 +47,9 @@ class PlayState extends GameState
 		@quadtree.reset()
 		t.update(dt) for t in @novae
 		t.update(dt) for t in @obstacles
+		t.update(dt) for t in @powerups
 		t.update(dt) for t in @clouds
+		PlasmaCloud.update(dt)
 
 		@addObstacles(dt)
 
@@ -57,20 +61,11 @@ class PlayState extends GameState
 			star.update(dt)
 			branch = star.branch
 			if Config.autoFork and branch.forkable()
-				left = new Branch branch
-				right = new Branch branch
-				newStar = new Star (new Vec branch.tip), star.angle
-				left.setStar newStar
-				right.setStar star
-				newStar.angle -= Config.branchAngle
-				star.angle += Config.branchAngle
-				@stars.push newStar
-				branch.stop()
-				@branches.push left
-				@branches.push right
+				star.tell 'fork'
 
 		@handleCollision()
 		@bringOutTheDead()
+		@processQueue star for star in @stars
 
 		$('body').css
 			'background-position': "0 #{@heightAchieved / 10}px"
@@ -166,6 +161,8 @@ class PlayState extends GameState
 			new klass randomSpotOffscreen(klass.spriteImage.image.height), vel
 
 		prob Config.probability.cloud, =>
+			@powerups.push (new PlasmaCloud randomSpotOffscreen(PlasmaCloud.canvas.height), new Vec(_.random(0, 0.1), 0) )
+		prob Config.probability.cloud, =>
 			@clouds.push make Cloud, new Vec(_.random(2, 5), 0)
 		prob Config.probability.balloon, =>
 			@obstacles.push make Balloon, new Vec(_.random(-2, 2), 0)
@@ -197,19 +194,47 @@ class PlayState extends GameState
 				hits = rawhits.filter (h) =>
 					h.object != star and h.quad().onQuad star.qbox.quad() # and not (h.object instanceof Star and h.object.isDead)
 				if hits.length > 0
-					obstacles = (hit.object for hit in hits when not (hit.object instanceof Star))
+					powerups = (hit.object for hit in hits when hit.object instanceof Powerup)
+					obstacles = (hit.object for hit in hits when hit.object instanceof Obstacle)
 					stargroup = (hit.object for hit in hits when hit.object instanceof Star)
 					stargroup.push star
-					console.log stargroup, obstacles
 					if obstacles.length > 0
 						@killStar s for s in stargroup
+					else if powerups.length > 0
+						for p in powerups
+							for s in stargroup
+								p.bless s
 					else
 						@mergeStars stargroup
 		for ob in @obstacles
 			for hit in ob.qbox.getHits(@quadtree)
 				if hit.object instanceof Star and not hit.object.isDead and hit.quad().onQuad ob.qbox.quad()
 					@killStar hit.object
+		for p in @powerups
+			for hit in p.qbox.getHits(@quadtree)
+				if hit.object instanceof Star and not hit.object.isDead and hit.quad().onQuad p.qbox.quad()
+					p.bless hit.object
 
+	processQueue: (star) ->
+		if star.queue.length > 0
+			for cmd in star.queue
+				switch cmd
+					when 'fork'
+						branch = star.branch
+						left = new Branch branch
+						right = new Branch branch
+						newStar = new Star (new Vec branch.tip), star.angle
+						left.setStar newStar
+						right.setStar star
+						newStar.angle -= Config.branchAngle
+						star.angle += Config.branchAngle
+						@stars.push newStar
+						branch.stop()
+						@branches.push left
+						@branches.push right
+			star.queue = []
+
+			
 	deathQuad: ->
 		{x, y, w, h} = @view.worldQuad()
 		x -= Config.autokillTolerance.x
@@ -218,13 +243,11 @@ class PlayState extends GameState
 		new Quad x, y, w, h
 
 	killStar: (star) ->
-		# @stars = _.without @stars, star
 		@novae.push new Nova star
 		star.die()
 
 	mergeStars: (stars) ->
 		highest = _.max stars, (s) -> -s.position.y
-		console.log 'merge', highest
 		star.merge(highest) for star in _.without stars, highest
 
 	novaProfiling: ->		
