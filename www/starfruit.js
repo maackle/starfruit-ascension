@@ -800,7 +800,7 @@
     autoFork: true,
     branchAngle: Math.PI / 4,
     branchAngleUpwardWeight: 0.1,
-    branchDistanceMax: 3000,
+    branchDistanceMax: 2000,
     branchFibers: 3,
     branchWidth: 14,
     knotSpacing: 45,
@@ -812,6 +812,7 @@
     novaStrokeWidth: 8,
     novaMaxRadius: 2000,
     novaExplosionSpeed: 200,
+    mergeDrawTime: 0.5,
     gameOverSlowdown: 0.2,
     autokillTolerance: {
       x: 200,
@@ -871,7 +872,7 @@
       cookie: new ImageResource('img/cookie.png')
     },
     atmosphere: {
-      layers: [[atmoscale * 0, tinycolor('#b5e0e2'), 1], [Atmosphere.noflyzone, tinycolor('#b5e0e2'), 1], [Atmosphere.tropopause, tinycolor('#97b2c6'), 0.95], [Atmosphere.stratopause, tinycolor('#778b9b'), 0.9], [Atmosphere.mesopause, tinycolor('#37475b'), 0.7], [Atmosphere.thermopause, tinycolor('#0f1419'), 0.0]]
+      layers: [[atmoscale * 0, tinycolor('#b5e0e2'), 1], [Atmosphere.noflyzone, tinycolor('#b5e0e2'), 1], [Atmosphere.tropopause, tinycolor('#97b2c6'), 0.95], [Atmosphere.stratopause, tinycolor('#778b9b'), 0.9], [Atmosphere.mesopause, tinycolor('#37475b'), 0.7], [Atmosphere.thermopause, tinycolor('#0f1419'), 0.0], [9999999999, tinycolor('#000'), 0.0]]
     }
   };
 
@@ -983,6 +984,8 @@
 
     Star.prototype.attraction = null;
 
+    Star.prototype.timers = null;
+
     function Star(position, angle) {
       this.position = position;
       this.angle = angle;
@@ -994,6 +997,9 @@
         offset: new Vec(Star.radius, Star.radius),
         object: this
       });
+      this.timers = {
+        merging: []
+      };
     }
 
     Star.prototype.speed = function(dt) {
@@ -1009,8 +1015,15 @@
       return this.branch.star = null;
     };
 
+    Star.prototype.merge = function(star) {
+      this.branch.tip = new Vec(star.position);
+      this.branch.doKnot();
+      this.die();
+      return star.timers.merging.push(Config.mergeDrawTime);
+    };
+
     Star.prototype.update = function(dt) {
-      var a, da, diff;
+      var a, da, diff, i, mergeTime, _i, _len, _ref1;
       if (this.attraction != null) {
         diff = new Vec(this.attraction);
         diff.sub(this.position);
@@ -1020,13 +1033,35 @@
       }
       this.velocity = Vec.polar(this.speed(dt), this.angle);
       this.position.add(this.velocity);
+      _ref1 = this.timers.merging;
+      for (i = _i = 0, _len = _ref1.length; _i < _len; i = ++_i) {
+        mergeTime = _ref1[i];
+        this.timers.merging[i] -= dt;
+        if (mergeTime < 0) {
+          this.timers.merging.splice(i, 1);
+        }
+      }
       return Star.__super__.update.apply(this, arguments);
     };
 
     Star.prototype.render = function(ctx) {
       var _this = this;
       return this.withTransform(ctx, function() {
-        ctx.beginPath();
+        var mergeTime, r, t, _i, _len, _ref1;
+        _ref1 = _this.timers.merging;
+        for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
+          mergeTime = _ref1[_i];
+          t = mergeTime / Config.mergeDrawTime;
+          r = lerp(1, 3, t);
+          ctx.save();
+          ctx.scale(r, r);
+          GFX.drawLineString(ctx, Star.vertices, {
+            closed: true
+          });
+          ctx.lineWidth = 1;
+          ctx.fill();
+          ctx.restore();
+        }
         GFX.drawLineString(ctx, Star.vertices);
         if (_this.isSafe()) {
           ctx.strokeStyle = rainbow(3);
@@ -1485,6 +1520,9 @@
       }
       this.handleCollision();
       this.bringOutTheDead();
+      $('body').css({
+        'background-position': "0 " + (this.heightAchieved / 10) + "px"
+      });
       if (this.stars.length > 0) {
         viewBottom = this.view.worldQuad().bottom();
         _ref5 = this.branches;
@@ -1683,7 +1721,7 @@
     };
 
     PlayState.prototype.handleCollision = function(objects) {
-      var alreadyHandled, deathQuad, hit, hits, ob, rawhits, star, _i, _j, _k, _len, _len1, _len2, _ref1, _ref2, _results,
+      var alreadyHandled, deathQuad, hit, hits, ob, obstacles, rawhits, s, star, stargroup, _i, _j, _k, _len, _len1, _len2, _ref1, _ref2, _results,
         _this = this;
       alreadyHandled = [];
       deathQuad = this.deathQuad();
@@ -1699,12 +1737,37 @@
               return h.object !== star && h.quad().onQuad(star.qbox.quad());
             });
             if (hits.length > 0) {
-              this.killStar(star);
-              for (_j = 0, _len1 = hits.length; _j < _len1; _j++) {
-                hit = hits[_j];
-                if (hit.object instanceof Star) {
-                  this.killStar(hit.object);
+              obstacles = (function() {
+                var _j, _len1, _results;
+                _results = [];
+                for (_j = 0, _len1 = hits.length; _j < _len1; _j++) {
+                  hit = hits[_j];
+                  if (!(hit.object instanceof Star)) {
+                    _results.push(hit.object);
+                  }
                 }
+                return _results;
+              })();
+              stargroup = (function() {
+                var _j, _len1, _results;
+                _results = [];
+                for (_j = 0, _len1 = hits.length; _j < _len1; _j++) {
+                  hit = hits[_j];
+                  if (hit.object instanceof Star) {
+                    _results.push(hit.object);
+                  }
+                }
+                return _results;
+              })();
+              stargroup.push(star);
+              console.log(stargroup, obstacles);
+              if (obstacles.length > 0) {
+                for (_j = 0, _len1 = stargroup.length; _j < _len1; _j++) {
+                  s = stargroup[_j];
+                  this.killStar(s);
+                }
+              } else {
+                this.mergeStars(stargroup);
               }
             }
           }
@@ -1744,6 +1807,21 @@
     PlayState.prototype.killStar = function(star) {
       this.novae.push(new Nova(star));
       return star.die();
+    };
+
+    PlayState.prototype.mergeStars = function(stars) {
+      var highest, star, _i, _len, _ref1, _results;
+      highest = _.max(stars, function(s) {
+        return -s.position.y;
+      });
+      console.log('merge', highest);
+      _ref1 = _.without(stars, highest);
+      _results = [];
+      for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
+        star = _ref1[_i];
+        _results.push(star.merge(highest));
+      }
+      return _results;
     };
 
     PlayState.prototype.novaProfiling = function() {

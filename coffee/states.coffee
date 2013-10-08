@@ -72,6 +72,9 @@ class PlayState extends GameState
 		@handleCollision()
 		@bringOutTheDead()
 
+		$('body').css
+			'background-position': "0 #{@heightAchieved / 10}px"
+
 		if @stars.length > 0
 
 			viewBottom = @view.worldQuad().bottom()
@@ -194,9 +197,14 @@ class PlayState extends GameState
 				hits = rawhits.filter (h) =>
 					h.object != star and h.quad().onQuad star.qbox.quad() # and not (h.object instanceof Star and h.object.isDead)
 				if hits.length > 0
-					@killStar star
-					for hit in hits when hit.object instanceof Star
-						@killStar hit.object
+					obstacles = (hit.object for hit in hits when not (hit.object instanceof Star))
+					stargroup = (hit.object for hit in hits when hit.object instanceof Star)
+					stargroup.push star
+					console.log stargroup, obstacles
+					if obstacles.length > 0
+						@killStar s for s in stargroup
+					else
+						@mergeStars stargroup
 		for ob in @obstacles
 			for hit in ob.qbox.getHits(@quadtree)
 				if hit.object instanceof Star and not hit.object.isDead and hit.quad().onQuad ob.qbox.quad()
@@ -214,7 +222,10 @@ class PlayState extends GameState
 		@novae.push new Nova star
 		star.die()
 
-	# mergeStars: (star) ->
+	mergeStars: (stars) ->
+		highest = _.max stars, (s) -> -s.position.y
+		console.log 'merge', highest
+		star.merge(highest) for star in _.without stars, highest
 
 	novaProfiling: ->		
 		if @novae.length > 0 and not window.profiling

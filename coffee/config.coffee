@@ -23,7 +23,7 @@ Config =
 	branchAngle: Math.PI / 4 	# deviation from path, radians
 	branchAngleUpwardWeight: 0.1 	# adds a small component of upwards direction
 	# branchDistanceMin: 100 	# player can initiate fork after this tis distance
-	branchDistanceMax: 3000		# any branch longer than this will be forked
+	branchDistanceMax: 2000		# any branch longer than this will be forked
 	branchFibers: 3 			# how many line strings to use to draw the branch
 	branchWidth: 14 			# how wide, total, is the branch
 	knotSpacing: 45 			# how far to travel before adding a knot
@@ -38,6 +38,8 @@ Config =
 	novaStrokeWidth: 8
 	novaMaxRadius: 2000 		# when to kill a nova
 	novaExplosionSpeed: 200 	# pixels per second
+
+	mergeDrawTime: 0.5 			# how long to animate a star merge in seconds
 
 	gameOverSlowdown: 0.2		# slowdown by this much on game over screen
 
@@ -83,4 +85,5 @@ Config =
 			[Atmosphere.stratopause, 	(tinycolor '#778b9b'), 0.9],	# stratopause
 			[Atmosphere.mesopause, 		(tinycolor '#37475b'), 0.7],	# mesopause
 			[Atmosphere.thermopause,		(tinycolor '#0f1419'), 0.0],	# spaaaace
+			[9999999999,				(tinycolor '#000'), 0.0],	# spaaaace
 		]

@@ -66,6 +66,8 @@ class Star extends Collidable
 	angle: -Math.PI / 2
 	attraction: null
 
+	timers: null
+
 	constructor: (@position, @angle) ->
 		@id = Star.nextID++
 		@velocity = new Vec 0, 0
@@ -74,6 +76,8 @@ class Star extends Collidable
 			dimensions: [Star.radius*2, Star.radius*2]
 			offset: new Vec Star.radius, Star.radius
 			object: this
+		@timers = 
+			merging: []
 
 	speed: (dt) -> dt * (if @attraction? then Config.starHyperSpeed else Config.starSpeed)
 
@@ -82,6 +86,12 @@ class Star extends Collidable
 	die: -> 
 		@isDead = true
 		@branch.star = null
+
+	merge: (star) ->
+		@branch.tip = new Vec star.position
+		@branch.doKnot()
+		@die()
+		star.timers.merging.push Config.mergeDrawTime
 
 	update: (dt) ->
 		if @attraction?
@@ -92,11 +102,24 @@ class Star extends Collidable
 			@angle = lerp(0, da, 0.1) + a
 		@velocity = Vec.polar @speed(dt), @angle
 		@position.add @velocity
+		for mergeTime, i in @timers.merging
+			@timers.merging[i] -= dt
+			if mergeTime < 0
+				@timers.merging.splice i, 1
 		super
 
 	render: (ctx) ->
 		@withTransform ctx, =>
-			ctx.beginPath()
+			for mergeTime in @timers.merging
+				t = mergeTime / Config.mergeDrawTime
+				r = lerp(1, 3, t)
+				ctx.save()
+				ctx.scale r, r
+				GFX.drawLineString ctx, Star.vertices, closed: true
+
+				ctx.lineWidth = 1
+				ctx.fill()
+				ctx.restore()
 			GFX.drawLineString ctx, Star.vertices
 			if @isSafe()
 				ctx.strokeStyle = rainbow(3)
@@ -107,6 +130,8 @@ class Star extends Collidable
 			ctx.lineWidth = 2
 			ctx.fill()
 			ctx.stroke()
+			
+
 
 Star.radius = Config.starRadius
 Star.radius2 = Config.starInnerRadius
