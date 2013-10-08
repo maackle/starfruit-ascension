@@ -255,7 +255,9 @@
     };
 
     Quad.prototype.onQuad = function(q) {
-      return !(this.x > q.x + q.w || this.x + this.w < q.x || this.y > q.y + q.h || this.y + this.h < q.y);
+      var intersects;
+      intersects = !(this.x > q.x + q.w || this.x + this.w < q.x || this.y > q.y + q.h || this.y + this.h < q.y);
+      return intersects;
     };
 
     return Quad;
@@ -474,6 +476,14 @@
       return this.ctx.restore();
     };
 
+    Viewport.prototype.width = function() {
+      return this.canvas.width;
+    };
+
+    Viewport.prototype.height = function() {
+      return this.canvas.height;
+    };
+
     Viewport.prototype.dimensions = function() {
       return [this.canvas.width, this.canvas.height];
     };
@@ -520,37 +530,66 @@
     }
 
     GameState.prototype.bind = function(what, events, fn) {
+      var ee;
       if (this._boundEvents == null) {
         this._boundEvents = [];
       }
-      return this._boundEvents.push([what, events, fn]);
+      ee = {
+        what: what,
+        events: events,
+        fn: fn
+      };
+      if (this.isActive()) {
+        this._bindEvent(ee);
+      }
+      return this._boundEvents.push(ee);
+    };
+
+    GameState.prototype._bindEvent = function(ee) {
+      var events, fn, what;
+      ee.bound = true;
+      what = ee.what, events = ee.events, fn = ee.fn;
+      return $(what).on(events, fn);
+    };
+
+    GameState.prototype._unbindEvent = function(ee) {
+      var events, fn, what;
+      ee.bound = false;
+      what = ee.what, events = ee.events, fn = ee.fn;
+      return $(what).off(events);
     };
 
     GameState.prototype._bindEvents = function() {
-      var e, events, fn, what, _i, _len, _ref, _results;
+      var ee, _i, _len, _ref, _results;
       if (this._boundEvents == null) {
         this._boundEvents = [];
       }
       _ref = this._boundEvents;
       _results = [];
       for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        e = _ref[_i];
-        what = e[0], events = e[1], fn = e[2];
-        _results.push($(what).on(events, fn));
+        ee = _ref[_i];
+        if (ee.bound === false) {
+          _results.push(this._bindEvent(ee));
+        }
       }
       return _results;
     };
 
     GameState.prototype._unbindEvents = function() {
-      var e, events, fn, what, _i, _len, _ref, _results;
+      var ee, _i, _len, _ref, _results;
       _ref = this._boundEvents;
       _results = [];
       for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        e = _ref[_i];
-        what = e[0], events = e[1], fn = e[2];
-        _results.push($(what).off(events));
+        ee = _ref[_i];
+        if (ee.bound === true) {
+          _results.push(this._unbindEvent(ee));
+        }
       }
       return _results;
+    };
+
+    GameState.prototype.isActive = function() {
+      return this.game != null;
     };
 
     GameState.prototype.enter = function(info) {};
@@ -622,28 +661,37 @@
       return this.states[this.states.length - 1];
     };
 
-    GameEngine.prototype.pushState = function(state) {
-      state.game = this;
-      state.parent = this.currentState();
-      if (!state._isInitialized) {
-        if (typeof state.initialize === "function") {
-          state.initialize(game);
-        }
-        state._isInitialized = true;
+    GameEngine.prototype._switchState = function(old, noob) {
+      if (old) {
+        old.exit();
+        old._unbindEvents();
+        old.game = null;
+        old.parent = null;
       }
-      this.states.push(state);
-      state._bindEvents();
-      return state.enter();
+      if (noob) {
+        noob.game = this;
+        noob.parent = old || null;
+        noob._bindEvents();
+        noob.enter();
+        if (!noob._isInitialized) {
+          if (typeof noob.initialize === "function") {
+            noob.initialize(game);
+          }
+          return noob._isInitialized = true;
+        }
+      }
+    };
+
+    GameEngine.prototype.pushState = function(state) {
+      this._switchState(this.currentState(), state);
+      return this.states.push(state);
     };
 
     GameEngine.prototype.popState = function() {
-      var state;
-      state = this.states.pop();
-      state.exit();
-      state._unbindEvents();
-      state.game = null;
-      state.parent = null;
-      return state;
+      var old;
+      old = this.states.pop();
+      this._switchState(old, this.currentState());
+      return old;
     };
 
     GameEngine.prototype.doLoop = function(dt) {
@@ -688,19 +736,20 @@
             return _this.canvas.mozRequestFullScreen();
         }
       });
-      $(this.canvas).on('mousemove', function(e) {
+      $(this.canvas).on('touchmove mousemove', function(e) {
+        e.preventDefault();
         _this.mouse.position.x = e.offsetX || e.layerX;
         return _this.mouse.position.y = e.offsetY || e.layerY;
-      });
-      $(this.canvas).on('mousedown', function(e) {
+      }).on('touchstart mousedown', function(e) {
+        e.preventDefault();
         switch (e.which) {
           case 1:
             return _this.mouse.leftButton = true;
           case 3:
             return _this.mouse.rightButton = true;
         }
-      });
-      $(this.canvas).on('mouseup', function(e) {
+      }).on('touchend mouseup', function(e) {
+        e.preventDefault();
         switch (e.which) {
           case 1:
             return _this.mouse.leftButton = false;
@@ -732,45 +781,48 @@
 
   globals = {};
 
-  atmoscale = 1.0 / 2.0;
+  atmoscale = 1.0;
 
   Atmosphere = {
     noflyzone: 5000 * atmoscale,
-    tropopause: 18000 * atmoscale,
-    stratopause: 40000 * atmoscale,
-    mesopause: 75000 * atmoscale,
-    exopause: 100000 * atmoscale
+    tropopause: 12000 * atmoscale,
+    stratopause: 50000 * atmoscale,
+    mesopause: 80000 * atmoscale,
+    thermopause: 500000 * atmoscale
   };
 
   Config = {
     mainFont: 'Monoton',
     hudFont: 'Offside',
     debugDraw: false,
-    starSpeed: 15,
-    starHyperSpeed: 25,
+    starSpeed: 550,
+    starHyperSpeed: 700,
     autoFork: true,
-    branchAngle: Math.PI / 6,
+    branchAngle: Math.PI / 4,
     branchAngleUpwardWeight: 0.1,
     branchDistanceMax: 3000,
     branchFibers: 3,
-    branchWidth: 10,
-    knotSpacing: 100,
+    branchWidth: 14,
+    knotSpacing: 45,
     knotSpacingWhileThrusting: 50,
-    knotAngleJitter: Math.PI / 24,
+    knotAngleJitter: Math.PI / 256,
     starRadius: 16,
     starInnerRadius: 8,
     starSafetyDistance: 128,
+    novaStrokeWidth: 8,
     novaMaxRadius: 2000,
     novaExplosionSpeed: 200,
-    gameOverSlowdown: 1.0,
-    autokillDistanceRatio: 1.25,
-    autokillOffscreenX: 600,
+    gameOverSlowdown: 0.2,
+    autokillTolerance: {
+      x: 200,
+      y: 200
+    },
     probability: {
       cloud: function(height) {
         if (height < Atmosphere.noflyzone) {
-          return 0.66;
+          return 1;
         } else if (height < Atmosphere.tropopause) {
-          return 0.5;
+          return 0.6;
         } else if (height < Atmosphere.stratopause) {
           return 1.25;
         } else if (height < Atmosphere.mesopause) {
@@ -819,7 +871,7 @@
       cookie: new ImageResource('img/cookie.png')
     },
     atmosphere: {
-      layers: [[atmoscale * 0, tinycolor('#b5e0e2'), 1], [Atmosphere.noflyzone, tinycolor('#b5e0e2'), 1], [Atmosphere.tropopause, tinycolor('#97b2c6'), 0.95], [Atmosphere.stratopause, tinycolor('#778b9b'), 0.9], [Atmosphere.mesopause, tinycolor('#37475b'), 0.7], [Atmosphere.exopause, tinycolor('#0f1419'), 0.0]]
+      layers: [[atmoscale * 0, tinycolor('#b5e0e2'), 1], [Atmosphere.noflyzone, tinycolor('#b5e0e2'), 1], [Atmosphere.tropopause, tinycolor('#97b2c6'), 0.95], [Atmosphere.stratopause, tinycolor('#778b9b'), 0.9], [Atmosphere.mesopause, tinycolor('#37475b'), 0.7], [Atmosphere.thermopause, tinycolor('#0f1419'), 0.0]]
     }
   };
 
@@ -935,6 +987,7 @@
       this.position = position;
       this.angle = angle;
       this.id = Star.nextID++;
+      this.velocity = new Vec(0, 0);
       this.qbox = new QuadtreeBox({
         position: this.position,
         dimensions: [Star.radius * 2, Star.radius * 2],
@@ -943,16 +996,8 @@
       });
     }
 
-    Star.prototype.speed = function() {
-      if (this.attraction != null) {
-        return Config.starHyperSpeed;
-      } else {
-        return Config.starSpeed;
-      }
-    };
-
-    Star.prototype.velocity = function() {
-      return Vec.polar(this.speed(), this.angle);
+    Star.prototype.speed = function(dt) {
+      return dt * (this.attraction != null ? Config.starHyperSpeed : Config.starSpeed);
     };
 
     Star.prototype.isSafe = function() {
@@ -964,7 +1009,7 @@
       return this.branch.star = null;
     };
 
-    Star.prototype.update = function() {
+    Star.prototype.update = function(dt) {
       var a, da, diff;
       if (this.attraction != null) {
         diff = new Vec(this.attraction);
@@ -973,7 +1018,8 @@
         da = clampAngleSigned(diff.angle() - a);
         this.angle = lerp(0, da, 0.1) + a;
       }
-      this.position.add(this.velocity());
+      this.velocity = Vec.polar(this.speed(dt), this.angle);
+      this.position.add(this.velocity);
       return Star.__super__.update.apply(this, arguments);
     };
 
@@ -1067,13 +1113,9 @@
 
     Branch.prototype.update = function(dt) {
       if (this.star != null) {
-        this.distanceTravelled += this.star.velocity().length();
+        this.distanceTravelled += this.star.velocity.length();
         if (this.distanceTravelled - this.lastKnotDistance > this.knotSpacing) {
-          this.doKnot();
-        }
-        if (this.markForNoGrow) {
-          this.markForNoGrow = false;
-          return this.star = null;
+          return this.doKnot();
         }
       }
     };
@@ -1150,11 +1192,10 @@
     Nova.prototype.render = function(ctx) {
       var _this = this;
       return this.withTransform(ctx, function() {
-        ctx.beginPath();
-        ctx.lineWidth = 2;
         GFX.drawLineString(ctx, Star.vertices, {
           closed: true
         });
+        ctx.lineWidth = Config.novaStrokeWidth * Star.radius / Math.pow(_this.radius(), 0.75);
         ctx.strokeStyle = rainbow(10);
         return ctx.stroke();
       });
@@ -1188,7 +1229,7 @@
   Balloon = (function(_super) {
     __extends(Balloon, _super);
 
-    Balloon.prototype.angAccel = 0.001;
+    Balloon.prototype.angAccel = Math.PI / 4;
 
     function Balloon() {
       var dim, topdim;
@@ -1209,14 +1250,14 @@
       });
     }
 
-    Balloon.prototype.update = function() {
+    Balloon.prototype.update = function(dt) {
       Balloon.__super__.update.apply(this, arguments);
       if (this.angle < 0) {
-        this.angVel += this.angAccel;
+        this.angVel += this.angAccel * dt;
       } else {
-        this.angVel -= this.angAccel;
+        this.angVel -= this.angAccel * dt;
       }
-      return this.angle += this.angVel;
+      return this.angle += this.angVel * dt;
     };
 
     Balloon.prototype.render = function(ctx) {
@@ -1325,6 +1366,14 @@
 
   })(Obstacle);
 
+  Balloon.spriteImage = Config.images.balloon;
+
+  Cloud.spriteImage = Config.images.cloud;
+
+  Cookie.spriteImage = Config.images.cookie;
+
+  Satellite.spriteImage = Config.images.satellite;
+
   PlayState = (function(_super) {
     __extends(PlayState, _super);
 
@@ -1338,15 +1387,17 @@
 
     PlayState.prototype.quadtree = Quadtree.create(1000, 100000);
 
-    PlayState.prototype.obstacles = [];
+    PlayState.prototype.multiplier = 1;
 
-    PlayState.prototype.clouds = [];
+    PlayState.prototype.obstacles = null;
 
-    PlayState.prototype.novae = [];
+    PlayState.prototype.clouds = null;
 
-    PlayState.prototype.stars = [];
+    PlayState.prototype.novae = null;
 
-    PlayState.prototype.branches = [];
+    PlayState.prototype.stars = null;
+
+    PlayState.prototype.branches = null;
 
     function PlayState() {
       var numRainbowColors, p;
@@ -1359,6 +1410,11 @@
         }
         return _results;
       })();
+      this.obstacles = [];
+      this.clouds = [];
+      this.novae = [];
+      this.stars = [];
+      this.branches = [];
     }
 
     PlayState.prototype.initialize = function() {
@@ -1402,6 +1458,7 @@
         t = _ref3[_k];
         t.update(dt);
       }
+      this.addObstacles(dt);
       _ref4 = this.stars;
       for (_l = 0, _len3 = _ref4.length; _l < _len3; _l++) {
         star = _ref4[_l];
@@ -1426,18 +1483,18 @@
           this.branches.push(right);
         }
       }
-      viewBottom = this.view.worldQuad().bottom();
-      _ref5 = this.branches;
-      for (_m = 0, _len4 = _ref5.length; _m < _len4; _m++) {
-        branch = _ref5[_m];
-        branch.update(dt);
-        if (branch.highestAltitude < -viewBottom) {
-          branch.die();
-        }
-      }
       this.handleCollision();
       this.bringOutTheDead();
       if (this.stars.length > 0) {
+        viewBottom = this.view.worldQuad().bottom();
+        _ref5 = this.branches;
+        for (_m = 0, _len4 = _ref5.length; _m < _len4; _m++) {
+          branch = _ref5[_m];
+          branch.update(dt);
+          if ((branch.star == null) && branch.highestAltitude < -viewBottom) {
+            branch.die();
+          }
+        }
         this.highestStar = _.min(this.stars, function(s) {
           return s.position.y;
         });
@@ -1445,19 +1502,19 @@
         if (-((_ref7 = this.highestStar) != null ? _ref7.position.y : void 0) > this.heightAchieved) {
           this.heightAchieved = -this.highestStar.position.y;
         }
-        return this.view.scroll.y = Math.max(0, this.heightAchieved);
+        this.view.scroll.y = Math.max(0, this.heightAchieved);
+        return this.multiplier = this.stars.length;
       }
     };
 
-    PlayState.prototype.transition = function() {
-      if (this.stars.length === 0) {
-        return this.game.pushState(new GameOverState);
-      }
-    };
-
-    PlayState.prototype.render = function(ctx) {
-      var _this = this;
-      this.view.clearScreen('blue');
+    PlayState.prototype.render = function() {
+      var fillstroke,
+        _this = this;
+      fillstroke = function(ctx, x, y, text) {
+        ctx.fillText(text, x, y);
+        return ctx.strokeText(text, x, y);
+      };
+      this.view.clearScreen(this.skyColor(this.heightAchieved));
       this.view.draw(function(ctx) {
         var box, t, _i, _j, _k, _l, _len, _len1, _len2, _len3, _len4, _len5, _m, _n, _ref1, _ref2, _ref3, _ref4, _ref5, _ref6, _results;
         _ref1 = _this.novae;
@@ -1498,15 +1555,88 @@
           return _results;
         }
       });
-      return this.viewHUD.draw(function(ctx) {
-        ctx.font = "60px " + Config.hudFont;
-        ctx.strokeStyle = '#aaa';
-        ctx.fillStyle = '#eee';
-        ctx.lineWidth = 1.5;
-        ctx.setTransform(1, 0, 0, 1, 0, 0);
-        ctx.fillText(parseInt(_this.heightAchieved) + 'm', 50, 100);
-        return ctx.strokeText(parseInt(_this.heightAchieved) + 'm', 50, 100);
+      if (this.isActive()) {
+        return this.viewHUD.draw(function(ctx) {
+          var altitudeText, altitudeTextWidth;
+          ctx.font = "60px " + Config.hudFont;
+          ctx.strokeStyle = '#aaa';
+          ctx.fillStyle = '#eee';
+          ctx.lineWidth = 1.5;
+          ctx.setTransform(1, 0, 0, 1, 0, 0);
+          altitudeText = parseInt(_this.heightAchieved / 1000) + 'km';
+          ctx.fillText(altitudeText, 50, 100);
+          ctx.strokeText(altitudeText, 50, 100);
+          altitudeTextWidth = ctx.measureText(altitudeText).width;
+          if (_this.multiplier > 0) {
+            ctx.font = "30px " + Config.hudFont;
+            return fillstroke(ctx, 50 + altitudeTextWidth + 25, 100, "★x" + _this.multiplier);
+          }
+        });
+      }
+    };
+
+    PlayState.prototype.skyColor = function(height) {
+      var alpha, alphaHi, alphaLo, b, colorHi, colorLo, g, heightHi, heightLo, hi, layer, layerHi, layerLo, layers, lo, r, t, _i, _len, _ref1;
+      layers = Config.atmosphere.layers;
+      layerLo = layers[0];
+      for (_i = 0, _len = layers.length; _i < _len; _i++) {
+        layer = layers[_i];
+        layerHi = layer;
+        if (layerHi[0] > height) {
+          break;
+        }
+        layerLo = layer;
+      }
+      heightLo = layerLo[0], colorLo = layerLo[1], alphaLo = layerLo[2];
+      heightHi = layerHi[0], colorHi = layerHi[1], alphaHi = layerHi[2];
+      t = (height - heightLo) / (heightHi - heightLo);
+      lo = colorLo.toRgb();
+      hi = colorHi.toRgb();
+      alpha = lerp(alphaLo, alphaHi, t);
+      _ref1 = tinycolor({
+        r: lerp(lo.r, hi.r, t),
+        g: lerp(lo.g, hi.g, t),
+        b: lerp(lo.b, hi.b, t)
+      }).toRgb(), r = _ref1.r, g = _ref1.g, b = _ref1.b;
+      return "rgba(" + r + ", " + g + ", " + b + ", " + alpha + ")";
+    };
+
+    PlayState.prototype.addObstacles = function(dt) {
+      var make, prob, randomSpotOffscreen, viewQuad, viewVolume,
+        _this = this;
+      viewQuad = this.view.worldQuad();
+      viewVolume = viewQuad.width() * viewQuad.height();
+      prob = function(probFn, callback) {
+        if (Math.random() < dt * probFn(_this.heightAchieved)) {
+          return callback();
+        }
+      };
+      randomSpotOffscreen = function(objectHeight) {
+        var x, y, y0, y1;
+        if (objectHeight == null) {
+          objectHeight = 0;
+        }
+        x = _.random(viewQuad.left(), viewQuad.right());
+        y1 = viewQuad.top() - objectHeight;
+        y0 = y1 - 100;
+        y = Math.random() * (y1 - y0) + y0;
+        return new Vec(x, y);
+      };
+      make = function(klass, vel) {
+        return new klass(randomSpotOffscreen(klass.spriteImage.image.height), vel);
+      };
+      prob(Config.probability.cloud, function() {
+        return _this.clouds.push(make(Cloud, new Vec(_.random(2, 5), 0)));
       });
+      return prob(Config.probability.balloon, function() {
+        return _this.obstacles.push(make(Balloon, new Vec(_.random(-2, 2), 0)));
+      });
+    };
+
+    PlayState.prototype.transition = function() {
+      if (this.stars.length === 0) {
+        return this.game.pushState(new GameOverState);
+      }
     };
 
     PlayState.prototype.bringOutTheDead = function() {
@@ -1553,49 +1683,77 @@
     };
 
     PlayState.prototype.handleCollision = function(objects) {
-      var alreadyHandled, hit, hits, rawhits, star, viewQuad, _i, _len, _ref1, _results,
+      var alreadyHandled, deathQuad, hit, hits, ob, rawhits, star, _i, _j, _k, _len, _len1, _len2, _ref1, _ref2, _results,
         _this = this;
       alreadyHandled = [];
-      viewQuad = this.view.worldQuad();
+      deathQuad = this.deathQuad();
       _ref1 = this.stars;
-      _results = [];
       for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
         star = _ref1[_i];
         if (!star.isDead) {
-          if (!viewQuad.onQuad(star.qbox.quad())) {
-            _results.push(this.killStar(star));
+          if (!deathQuad.onQuad(star.qbox.quad())) {
+            this.killStar(star);
           } else if (!star.isSafe()) {
             rawhits = star.qbox.getHits(this.quadtree);
             hits = rawhits.filter(function(h) {
-              return !star.isDead && h.object !== star && h.quad().onQuad(star.qbox.quad());
+              return h.object !== star && h.quad().onQuad(star.qbox.quad());
             });
             if (hits.length > 0) {
               this.killStar(star);
-              _results.push((function() {
-                var _j, _len1, _results1;
-                _results1 = [];
-                for (_j = 0, _len1 = hits.length; _j < _len1; _j++) {
-                  hit = hits[_j];
-                  if (hit.object instanceof Star) {
-                    _results1.push(this.killStar(hit.object));
-                  }
+              for (_j = 0, _len1 = hits.length; _j < _len1; _j++) {
+                hit = hits[_j];
+                if (hit.object instanceof Star) {
+                  this.killStar(hit.object);
                 }
-                return _results1;
-              }).call(this));
-            } else {
-              _results.push(void 0);
+              }
             }
-          } else {
-            _results.push(void 0);
           }
         }
       }
+      _ref2 = this.obstacles;
+      _results = [];
+      for (_k = 0, _len2 = _ref2.length; _k < _len2; _k++) {
+        ob = _ref2[_k];
+        _results.push((function() {
+          var _l, _len3, _ref3, _results1;
+          _ref3 = ob.qbox.getHits(this.quadtree);
+          _results1 = [];
+          for (_l = 0, _len3 = _ref3.length; _l < _len3; _l++) {
+            hit = _ref3[_l];
+            if (hit.object instanceof Star && !hit.object.isDead && hit.quad().onQuad(ob.qbox.quad())) {
+              _results1.push(this.killStar(hit.object));
+            } else {
+              _results1.push(void 0);
+            }
+          }
+          return _results1;
+        }).call(this));
+      }
       return _results;
+    };
+
+    PlayState.prototype.deathQuad = function() {
+      var h, w, x, y, _ref1;
+      _ref1 = this.view.worldQuad(), x = _ref1.x, y = _ref1.y, w = _ref1.w, h = _ref1.h;
+      x -= Config.autokillTolerance.x;
+      w += 2 * Config.autokillTolerance.x;
+      h += Config.autokillTolerance.y;
+      return new Quad(x, y, w, h);
     };
 
     PlayState.prototype.killStar = function(star) {
       this.novae.push(new Nova(star));
       return star.die();
+    };
+
+    PlayState.prototype.novaProfiling = function() {
+      if (this.novae.length > 0 && !window.profiling) {
+        console.profile(Math.random());
+        return window.profiling = true;
+      } else if (window.profiling && this.novae.length === 0) {
+        console.profileEnd();
+        return window.profiling = false;
+      }
     };
 
     return PlayState;
@@ -1610,7 +1768,22 @@
       return _ref1;
     }
 
-    GameOverState.prototype.enter = function() {};
+    GameOverState.prototype.initialize = function() {
+      var _this = this;
+      return _.delay(function() {
+        return _this.bind(_this.game.canvas, 'click', function(e) {
+          var game;
+          game = _this.game;
+          game.popState();
+          game.popState();
+          return game.pushState(new PlayState);
+        });
+      }, 1000);
+    };
+
+    GameOverState.prototype.enter = function() {
+      return this.view = this.parent.viewHUD;
+    };
 
     GameOverState.prototype.exit = function() {};
 
@@ -1626,7 +1799,50 @@
     };
 
     GameOverState.prototype.render = function(ctx) {
-      return this.parent.render(ctx);
+      var b, g, r, view, _ref2,
+        _this = this;
+      this.parent.render(ctx);
+      _ref2 = tinycolor(rainbow()).toRgb(), r = _ref2.r, g = _ref2.g, b = _ref2.b;
+      view = this.view;
+      view.fillScreen("rgba(" + r + "," + g + "," + b + ",0.75)");
+      return view.draw(function(ctx) {
+        var color, font, height, line, lines, text, width, x, y, _i, _len, _results;
+        ctx.lineWidth = 1.5;
+        ctx.fillStyle = '#222';
+        ctx.strokeStyle = '#222';
+        lines = [
+          {
+            text: "YOU ASCENDED",
+            font: "70px " + Config.mainFont,
+            height: 70
+          }, {
+            text: "" + (parseInt(_this.parent.heightAchieved)) + " meters",
+            font: "100px " + Config.mainFont,
+            height: 100
+          }, {
+            text: "click to begin anew",
+            font: "80px " + Config.mainFont,
+            height: 100,
+            color: 'white'
+          }
+        ];
+        y = 100;
+        _results = [];
+        for (_i = 0, _len = lines.length; _i < _len; _i++) {
+          line = lines[_i];
+          text = line.text, font = line.font, height = line.height, color = line.color;
+          if (color != null) {
+            ctx.strokeStyle = color;
+            ctx.fillStyle = color;
+          }
+          ctx.font = font;
+          width = ctx.measureText(text).width;
+          x = view.width() / 2 - width / 2;
+          y += height * 1.5;
+          _results.push(ctx.strokeText(text, x, y));
+        }
+        return _results;
+      });
     };
 
     return GameOverState;
@@ -1661,7 +1877,7 @@
     Game = new GameEngine({
       canvas: $('#game').get(0),
       initialState: states.play,
-      fps: 30,
+      fps: 50,
       preUpdate: function() {
         return globals.rainbowIndex += 1;
       }

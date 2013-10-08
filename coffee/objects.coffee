@@ -68,15 +68,14 @@ class Star extends Collidable
 
 	constructor: (@position, @angle) ->
 		@id = Star.nextID++
+		@velocity = new Vec 0, 0
 		@qbox = new QuadtreeBox
 			position: @position
 			dimensions: [Star.radius*2, Star.radius*2]
 			offset: new Vec Star.radius, Star.radius
 			object: this
 
-	speed: -> if @attraction? then Config.starHyperSpeed else Config.starSpeed
-
-	velocity: -> Vec.polar @speed(), @angle
+	speed: (dt) -> dt * (if @attraction? then Config.starHyperSpeed else Config.starSpeed)
 
 	isSafe: -> @branch.distanceTravelled < Config.starSafetyDistance
 
@@ -84,16 +83,15 @@ class Star extends Collidable
 		@isDead = true
 		@branch.star = null
 
-	update: ->
+	update: (dt) ->
 		if @attraction?
 			diff = new Vec @attraction
 			diff.sub @position
 			a = clampAngleSigned @angle
 			da = clampAngleSigned(diff.angle() - a)
 			@angle = lerp(0, da, 0.1) + a
-		# console.log 'befo', @position.x, @position.y
-		@position.add @velocity()
-		# console.log 'afta', @position.x, @position.y
+		@velocity = Vec.polar @speed(dt), @angle
+		@position.add @velocity
 		super
 
 	render: (ctx) ->
@@ -152,14 +150,9 @@ class Branch extends Thing
 
 	update: (dt) ->
 		if @star?
-			@distanceTravelled += @star.velocity().length()
-			
+			@distanceTravelled += @star.velocity.length()
 			if @distanceTravelled - @lastKnotDistance > @knotSpacing
 				@doKnot()
-
-			if @markForNoGrow
-				@markForNoGrow = false
-				@star = null
 
 	render: (ctx) ->
 		ctx.beginPath()
@@ -209,9 +202,8 @@ class Nova extends Thing
 
 	render: (ctx) ->
 		@withTransform ctx, =>
-			ctx.beginPath()
-			ctx.lineWidth = 2
 			GFX.drawLineString ctx, Star.vertices, closed: true
+			ctx.lineWidth = Config.novaStrokeWidth * Star.radius / Math.pow(@radius(), 0.75)
 			ctx.strokeStyle = rainbow(10)
 			ctx.stroke()
 
@@ -229,7 +221,7 @@ class Obstacle extends Collidable
 
 class Balloon extends Obstacle
 
-	angAccel: 0.001
+	angAccel: Math.PI / 4
 
 	constructor: ->
 		super
@@ -250,13 +242,13 @@ class Balloon extends Obstacle
 			dimensions: dim
 			object: this
 
-	update: ->
+	update: (dt) ->
 		super
 		if @angle < 0
-			@angVel += @angAccel
+			@angVel += @angAccel * dt
 		else
-			@angVel -= @angAccel
-		@angle += @angVel
+			@angVel -= @angAccel * dt
+		@angle += @angVel * dt
 
 	render: (ctx) ->  # assuming all Obstacles have Sprites
 		@sprite.draw(position: @position, rotation: @angle)(ctx)
@@ -325,3 +317,9 @@ class Satellite extends Obstacle
 
 	render: (ctx) ->
 		@sprite.draw(position: @position, rotation: @angle)(ctx)
+
+
+Balloon.spriteImage = Config.images.balloon
+Cloud.spriteImage = Config.images.cloud
+Cookie.spriteImage = Config.images.cookie
+Satellite.spriteImage = Config.images.satellite

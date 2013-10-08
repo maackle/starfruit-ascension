@@ -95,7 +95,8 @@ class Quad
 		vec.x >= @x and vec.y >= @y and vec.x <= @x + @w and vec.y <= @y + @h
 
 	onQuad: (q) ->
-		not (@x > q.x+q.w || @x+@w < q.x || @y > q.y+q.h || @y+@h < q.y)
+		intersects = not (@x > q.x+q.w || @x+@w < q.x || @y > q.y+q.h || @y+@h < q.y)
+		intersects
 
 class ImageResource
 
@@ -232,6 +233,8 @@ class Viewport
 		@ctx.fillRect 0, 0, w, h
 		@ctx.restore()
 
+	width: -> @canvas.width
+	height: -> @canvas.height
 	dimensions: -> [@canvas.width, @canvas.height]
 	
 	worldQuad: ->  # TODO: scale + rotation
@@ -266,18 +269,29 @@ class GameState
 
 	bind: (what, events, fn) -> 
 		@_boundEvents ?= []
-		@_boundEvents.push [what, events, fn]
+		ee = {what: what, events: events, fn: fn}
+		if @isActive() 
+			@_bindEvent(ee)
+		@_boundEvents.push ee
+
+	_bindEvent: (ee) ->
+		ee.bound = true
+		{what, events, fn} = ee
+		$(what).on events, fn
+
+	_unbindEvent: (ee) ->
+		ee.bound = false
+		{what, events, fn} = ee
+		$(what).off events
 
 	_bindEvents: ->
 		@_boundEvents ?= []
-		for e in @_boundEvents
-			[what, events, fn] = e
-			$(what).on events, fn
-
+		@_bindEvent ee for ee in @_boundEvents when ee.bound is false
+			
 	_unbindEvents: ->
-		for e in @_boundEvents
-			[what, events, fn] = e
-			$(what).off events
+		@_unbindEvent ee for ee in @_boundEvents when ee.bound is true
+			
+	isActive: -> @game?  # if this is the last-entered state.  should only ever be one active state at a time per GameEngine
 
 	enter: (info) ->  # called when state is pushed on top
 
@@ -332,23 +346,31 @@ class GameEngine
 	currentState: -> 
 		@states[@states.length - 1]
 
+	_switchState: (old, noob) ->
+		if old
+			old.exit()
+			old._unbindEvents()
+			old.game = null
+			old.parent = null
+
+		if noob
+			noob.game = this
+			noob.parent = old or null
+			noob._bindEvents()
+			noob.enter()
+
+			if not noob._isInitialized
+				noob.initialize?(game)
+				noob._isInitialized = true			
+
 	pushState: (state) -> 
-		state.game = this
-		state.parent = @currentState()
-		if not state._isInitialized
-			state.initialize?(game)
-			state._isInitialized = true
+		@_switchState(@currentState(), state)
 		@states.push state
-		state._bindEvents()
-		state.enter()
 
 	popState: -> 
-		state = @states.pop()
-		state.exit()
-		state._unbindEvents()
-		state.game = null
-		state.parent = null
-		state
+		old = @states.pop()
+		@_switchState(old, @currentState())
+		old
 
 	doLoop: (dt) ->
 		# console.debug 'tick', dt
@@ -358,7 +380,7 @@ class GameEngine
 		state.update(dt)
 		@postUpdate?()
 		@preRender?()
-		state.render()
+		state.render()#(@canvas.getContext '2d')
 		@postRender?()
 		state.transition?()
 
@@ -377,19 +399,21 @@ class GameEngine
 					@canvas.webkitRequestFullScreen()
 					@canvas.mozRequestFullScreen()
 
-		$(@canvas).on 'mousemove', (e) =>
-			@mouse.position.x = e.offsetX or e.layerX
-			@mouse.position.y = e.offsetY or e.layerY
-		
-		$(@canvas).on 'mousedown', (e) =>
-			switch e.which
-				when 1 then @mouse.leftButton = true
-				when 3 then @mouse.rightButton = true
-
-		$(@canvas).on 'mouseup', (e) =>
-			switch e.which
-				when 1 then @mouse.leftButton = false
-				when 3 then @mouse.rightButton = false
+		$(@canvas)
+			.on 'touchmove mousemove', (e) =>
+				e.preventDefault()
+				@mouse.position.x = e.offsetX or e.layerX
+				@mouse.position.y = e.offsetY or e.layerY
+			.on 'touchstart mousedown', (e) =>
+				e.preventDefault()				
+				switch e.which
+					when 1 then @mouse.leftButton = true
+					when 3 then @mouse.rightButton = true
+			.on 'touchend mouseup', (e) =>
+				e.preventDefault()
+				switch e.which
+					when 1 then @mouse.leftButton = false
+					when 3 then @mouse.rightButton = false
 		
 		# prevent right click action
 		$(@canvas).on 'contextmenu', (e) =>

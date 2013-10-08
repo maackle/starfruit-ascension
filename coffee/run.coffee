@@ -5,7 +5,7 @@ do ->
 	numRainbowColors = 256
 	rainbowColors = 
 		(tinycolor("hsv(#{p * 100 / numRainbowColors}%, 50%, 100%)").toRgbString() for p in [0..numRainbowColors])
-		
+
 	window.rainbow = (factor=1) ->
 		rainbowColors[(globals.rainbowIndex * factor) % rainbowColors.length]
 
@@ -16,7 +16,7 @@ $ ->
 	Game = new GameEngine
 		canvas: $('#game').get(0)
 		initialState: states.play
-		fps: 30
+		fps: 50
 		preUpdate: ->
 			globals.rainbowIndex += 1
 

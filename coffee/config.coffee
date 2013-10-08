@@ -1,12 +1,12 @@
 globals = {}
 
-atmoscale = 1.0/2.0
+atmoscale = 1.0
 Atmosphere = 
 	noflyzone: 5000 * atmoscale
-	tropopause: 18000 * atmoscale
-	stratopause: 40000 * atmoscale
-	mesopause: 75000 * atmoscale
-	exopause: 100000 * atmoscale
+	tropopause: 12000 * atmoscale
+	stratopause: 50000 * atmoscale
+	mesopause: 80000 * atmoscale
+	thermopause: 500000 * atmoscale
 
 Config = 
 
@@ -17,38 +17,39 @@ Config =
 
 	
 	# BRANCHES + STARS
-	starSpeed: 15 				# normal speed
-	starHyperSpeed: 25 			# speed while left mousedown
+	starSpeed: 550 				# normal speed
+	starHyperSpeed: 700 			# speed while left mousedown
 	autoFork: true 				# form after branchDistanceMax
-	branchAngle: Math.PI / 6 	# deviation from path, radians
-	branchAngleUpwardWeight: 0.1 # add a small component of upwards direction
+	branchAngle: Math.PI / 4 	# deviation from path, radians
+	branchAngleUpwardWeight: 0.1 	# adds a small component of upwards direction
 	# branchDistanceMin: 100 	# player can initiate fork after this tis distance
 	branchDistanceMax: 3000		# any branch longer than this will be forked
 	branchFibers: 3 			# how many line strings to use to draw the branch
-	branchWidth: 10 			# how wide, total, is the branch
-	knotSpacing: 100 			# how far to travel before adding a knot
+	branchWidth: 14 			# how wide, total, is the branch
+	knotSpacing: 45 			# how far to travel before adding a knot
 	knotSpacingWhileThrusting: 50
-	knotAngleJitter: Math.PI / 24	# angular randomness to jostle the path
+	knotAngleJitter: Math.PI / 256	# angular randomness to jostle the path
 
 	starRadius: 16
 	starInnerRadius: 8
 	starSafetyDistance: 128 		# how far a star can travel before it becomes collidable.  
 									#	 used to prevent immediate annihilation of new branches
 
+	novaStrokeWidth: 8
 	novaMaxRadius: 2000 		# when to kill a nova
 	novaExplosionSpeed: 200 	# pixels per second
 
-	gameOverSlowdown: 1.0
+	gameOverSlowdown: 0.2		# slowdown by this much on game over screen
 
-	# WINDOW
-	autokillDistanceRatio: 1.25  # kill any stars that are further from the highest star by this ratio of "screen size"
-	autokillOffscreenX: 600  	# kill any stars that are offscreen by this much in the X axis
+	autokillTolerance:			# how far off the screen can a star go before being autokilled?
+		x: 200
+		y: 200
 
 	probability:
 		cloud: (height) ->
 			# return 1
-			if height < Atmosphere.noflyzone then 0.66
-			else if height < Atmosphere.tropopause then 0.5
+			if height < Atmosphere.noflyzone then 1
+			else if height < Atmosphere.tropopause then 0.6
 			else if height < Atmosphere.stratopause then 1.25
 			else if height < Atmosphere.mesopause then 0.33
 			else 0
@@ -81,5 +82,5 @@ Config =
 			[Atmosphere.tropopause,		(tinycolor '#97b2c6'), 0.95],	# tropopause
 			[Atmosphere.stratopause, 	(tinycolor '#778b9b'), 0.9],	# stratopause
 			[Atmosphere.mesopause, 		(tinycolor '#37475b'), 0.7],	# mesopause
-			[Atmosphere.exopause,		(tinycolor '#0f1419'), 0.0],	# spaaaace
+			[Atmosphere.thermopause,		(tinycolor '#0f1419'), 0.0],	# spaaaace
 		]
