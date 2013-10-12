@@ -276,6 +276,8 @@ class GameState
 
 	game: null  # this is set when being pushed onto a GameEngine and cleared when being popped
 	parent: null  # which GameState called this?
+	runTime: 0		# total active time
+	frameTime: 0	# time spent rendering last frame
 
 	constructor: ->
 		@_boundEvents = []
@@ -324,6 +326,7 @@ class GameEngine
 	states: null
 	intervals:
 		gameLoop: null
+	lastTick: null
 
 	constructor: (opts) ->
 		@states = []
@@ -387,6 +390,7 @@ class GameEngine
 
 	doLoop: (dt) ->
 		# console.debug 'tick', dt
+		@lastTick ?= new Date().getTime()
 		state = @currentState()
 		throw 'not a state' if not state instanceof GameState
 		@preUpdate?()
@@ -396,6 +400,11 @@ class GameEngine
 		state.render()#(@canvas.getContext '2d')
 		@postRender?()
 		state.transition?()
+		state.epoch += 1
+		executionTime = (new Date().getTime() - @lastTick) / 1000
+		state.runTime += executionTime
+		state.frameTime = executionTime
+		@lastTick = new Date().getTime()
 
 	togglePanic: ->
 		if @intervals.gameLoop?
@@ -412,11 +421,12 @@ class GameEngine
 					@canvas.webkitRequestFullScreen()
 					@canvas.mozRequestFullScreen()
 
-		$(@canvas)
+		$('body')
 			.on 'touchmove mousemove', (e) =>
+				{left, top} = $(@canvas).offset()
 				e.preventDefault()
-				@mouse.position.x = e.offsetX or e.layerX
-				@mouse.position.y = e.offsetY or e.layerY
+				@mouse.position.x = (e.clientX - left)
+				@mouse.position.y = (e.clientY - top)
 			.on 'touchstart mousedown', (e) =>
 				e.preventDefault()				
 				switch e.which
@@ -435,7 +445,7 @@ class GameEngine
 		$(window).on 'resize', (e) =>
 			$body = $('body')
 			$(@canvas).attr
-				width: $body.width()
+				# width: $body.width()
 				height: $body.height()
 
 		$(window).trigger 'resize'

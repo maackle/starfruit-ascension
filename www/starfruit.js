@@ -1,7 +1,8 @@
 (function() {
-  var Atmosphere, Balloon, Branch, Cloud, Collidable, Config, Cookie, GFX, GameEngine, GameOverState, GameState, ImageResource, M, Module, NotImplemented, Nova, Obstacle, PlasmaCloud, PlayState, Powerup, Quad, QuadtreeBox, Satellite, Sprite, Star, Thing, Vec, Viewport, atmoscale, clampAngleSigned, globals, i, lerp, makeImage, withImage, withImages, _ref, _ref1,
+  var Atmosphere, Balloon, Branch, Cloud, Collidable, Config, Cookie, GFX, GameEngine, GameOverState, GameState, ImageResource, InfoState, M, Module, NotImplemented, Nova, Obstacle, PlasmaCloud, PlayState, Powerup, Quad, QuadtreeBox, Satellite, SoundSystem, Sprite, Star, Thing, TitleState, Vec, Viewport, atmoscale, clampAngleSigned, globals, i, lerp, makeImage, withImage, withImages, _ref, _ref1, _ref2,
     __slice = [].slice,
     __indexOf = [].indexOf || function(item) { for (var i = 0, l = this.length; i < l; i++) { if (i in this && this[i] === item) return i; } return -1; },
+    _this = this,
     __hasProp = {}.hasOwnProperty,
     __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
 
@@ -554,6 +555,10 @@
 
     GameState.prototype.parent = null;
 
+    GameState.prototype.runTime = 0;
+
+    GameState.prototype.frameTime = 0;
+
     function GameState() {
       this._boundEvents = [];
     }
@@ -646,6 +651,8 @@
       gameLoop: null
     };
 
+    GameEngine.prototype.lastTick = null;
+
     function GameEngine(opts) {
       var _ref;
       this.states = [];
@@ -724,7 +731,10 @@
     };
 
     GameEngine.prototype.doLoop = function(dt) {
-      var state;
+      var executionTime, state;
+      if (this.lastTick == null) {
+        this.lastTick = new Date().getTime();
+      }
       state = this.currentState();
       if (!state instanceof GameState) {
         throw 'not a state';
@@ -743,7 +753,14 @@
       if (typeof this.postRender === "function") {
         this.postRender();
       }
-      return typeof state.transition === "function" ? state.transition() : void 0;
+      if (typeof state.transition === "function") {
+        state.transition();
+      }
+      state.epoch += 1;
+      executionTime = (new Date().getTime() - this.lastTick) / 1000;
+      state.runTime += executionTime;
+      state.frameTime = executionTime;
+      return this.lastTick = new Date().getTime();
     };
 
     GameEngine.prototype.togglePanic = function() {
@@ -765,10 +782,12 @@
             return _this.canvas.mozRequestFullScreen();
         }
       });
-      $(this.canvas).on('touchmove mousemove', function(e) {
+      $('body').on('touchmove mousemove', function(e) {
+        var left, top, _ref;
+        _ref = $(_this.canvas).offset(), left = _ref.left, top = _ref.top;
         e.preventDefault();
-        _this.mouse.position.x = e.offsetX || e.layerX;
-        return _this.mouse.position.y = e.offsetY || e.layerY;
+        _this.mouse.position.x = e.clientX - left;
+        return _this.mouse.position.y = e.clientY - top;
       }).on('touchstart mousedown', function(e) {
         e.preventDefault();
         switch (e.which) {
@@ -793,7 +812,6 @@
         var $body;
         $body = $('body');
         return $(_this.canvas).attr({
-          width: $body.width(),
           height: $body.height()
         });
       });
@@ -823,8 +841,10 @@
   Config = {
     mainFont: 'Monoton',
     hudFont: 'Offside',
-    debugDraw: true,
+    debugDraw: false,
     autoFork: false,
+    maxHighScores: 8,
+    metersPerPoint: 100,
     starSpeed: 550,
     starHyperSpeed: 700,
     branchAngle: Math.PI / 5,
@@ -847,52 +867,59 @@
       x: 200,
       y: 200
     },
-    probability: {
-      cloud: function(height) {
-        if (height < Atmosphere.noflyzone) {
-          return 1;
-        } else if (height < Atmosphere.tropopause) {
-          return 0.6;
-        } else if (height < Atmosphere.stratopause) {
-          return 1.25;
-        } else if (height < Atmosphere.mesopause) {
-          return 0.33;
-        } else {
-          return 0;
+    probability: (function() {
+      var NF, S, T;
+      NF = Atmosphere.noflyzone;
+      T = Atmosphere.tropopause;
+      S = Atmosphere.stratopause;
+      M = Atmosphere.mesopause;
+      return {
+        cloud: function(height) {
+          if (height < NF) {
+            return 1;
+          } else if (height < T) {
+            return 0.6;
+          } else if (height < S) {
+            return 1.25;
+          } else if (height < M) {
+            return 0.33;
+          } else {
+            return 0;
+          }
+        },
+        balloon: function(height) {
+          if (height < NF) {
+            return 0;
+          } else if (height < T) {
+            return 0.75;
+          } else if (height < S) {
+            return 0.15;
+          } else {
+            return 0;
+          }
+        },
+        satellite: function(height) {
+          if (height < S) {
+            return 0;
+          } else {
+            return 0.75;
+          }
+        },
+        cookie: function(height) {
+          var base;
+          base = 0.2;
+          if (height < NF) {
+            return 0;
+          } else if (height < S) {
+            return 0.1;
+          } else if (height < M) {
+            return base;
+          } else {
+            return base + (height - M) / M;
+          }
         }
-      },
-      balloon: function(height) {
-        if (height < Atmosphere.noflyzone) {
-          return 0;
-        } else if (height < Atmosphere.tropopause) {
-          return 0.75;
-        } else if (height < Atmosphere.stratopause) {
-          return 0.15;
-        } else {
-          return 0;
-        }
-      },
-      satellite: function(height) {
-        if (height > Atmosphere.stratopause) {
-          return 0.75;
-        } else {
-          return 0;
-        }
-      },
-      cookie: function(height) {
-        var base;
-        base = 0.2;
-        if (height < Atmosphere.noflyzone) {
-          return 0;
-        } else if (height > Atmosphere.stratopause) {
-          return base;
-        } else if (height > Atmosphere.mesopause) {
-          return base + (height - Atmosphere.mesopause) / Atmosphere.mesopause;
-        } else {
-          return 0.05;
-        }
-      }
-    },
+      };
+    })(),
     images: {
       star: new ImageResource('img/star-32.png'),
       cloud: new ImageResource('img/cloud-4-a.png'),
@@ -1487,9 +1514,16 @@
     };
 
     PlasmaCloud.prototype.render = function(ctx) {
-      return this.sprite.draw({
-        position: this.position
-      })(ctx);
+      var r, x, y, _ref1;
+      _ref1 = this.qbox.position, x = _ref1.x, y = _ref1.y;
+      r = this.qbox.width / 2;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fillStyle = rainbow(2, 0.25);
+      ctx.strokeStyle = 'white';
+      ctx.lineWidth = 1;
+      ctx.fill();
+      return ctx.stroke();
     };
 
     PlasmaCloud.prototype.bless = function(star) {
@@ -1524,7 +1558,9 @@
 
     PlayState.prototype.highestStar = null;
 
-    PlayState.prototype.heightAchieved = 0;
+    PlayState.prototype.altitude = 0;
+
+    PlayState.prototype.score = 0;
 
     PlayState.prototype.view = null;
 
@@ -1546,6 +1582,8 @@
 
     PlayState.prototype.branches = null;
 
+    PlayState.prototype.intervals = null;
+
     function PlayState() {
       var numRainbowColors, p;
       numRainbowColors = 256;
@@ -1563,6 +1601,7 @@
       this.novae = [];
       this.stars = [];
       this.branches = [];
+      this.intervals = {};
     }
 
     PlayState.prototype.initialize = function() {
@@ -1571,10 +1610,14 @@
       this.stars.push(star);
       branch = new Branch(new Vec(0, 0));
       branch.setStar(star);
-      return this.branches.push(branch);
+      this.branches.push(branch);
+      return globals.quadtree = this.quadtree;
     };
 
     PlayState.prototype.enter = function() {
+      var html;
+      html = "<div class=\"play-hud\">\n	<div class=\"altitude-container\">\n		<div class=\"label altitude-label\">altitude</div>\n		<div class=\"main altitude\">40km</div>\n	</div>\n	<div class=\"score-container\">\n		<div class=\"label score-label\">score</div>\n		<div class=\"main score\">2555</div>\n	</div>\n	<div class=\"multiplier-container\">\n		<div class=\"label multiplier-label\"></div>\n		<div class=\"multiplier\"></div>\n	</div>\n</div>";
+      $('#game-hud').html(html).show();
       if (this.view == null) {
         this.view = new Viewport(this.game.canvas, {
           scroll: new Vec(0, 0),
@@ -1589,7 +1632,7 @@
     PlayState.prototype.exit = function() {};
 
     PlayState.prototype.update = function(dt) {
-      var branch, h, star, t, viewBottom, w, _i, _j, _k, _l, _len, _len1, _len2, _len3, _len4, _len5, _len6, _m, _n, _o, _ref1, _ref2, _ref3, _ref4, _ref5, _ref6, _ref7, _ref8, _ref9;
+      var branch, h, prevAltitude, star, t, viewBottom, w, _i, _j, _k, _l, _len, _len1, _len2, _len3, _len4, _len5, _len6, _m, _n, _o, _ref1, _ref2, _ref3, _ref4, _ref5, _ref6, _ref7, _ref8, _ref9;
       this.quadtree.reset();
       _ref1 = this.novae;
       for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
@@ -1634,8 +1677,8 @@
         star = _ref6[_n];
         this.processQueue(star);
       }
-      $('body').css({
-        'background-position': "0 " + (this.heightAchieved / 10) + "px"
+      $('#game-container').css({
+        'background-position': "0 " + (this.altitude / 10) + "px"
       });
       if (this.stars.length > 0) {
         viewBottom = this.view.worldQuad().bottom();
@@ -1651,10 +1694,13 @@
           return s.position.y;
         });
         _ref8 = this.view.dimensions(), w = _ref8[0], h = _ref8[1];
-        if (-((_ref9 = this.highestStar) != null ? _ref9.position.y : void 0) > this.heightAchieved) {
-          this.heightAchieved = -this.highestStar.position.y;
+        prevAltitude = this.altitude;
+        if (-((_ref9 = this.highestStar) != null ? _ref9.position.y : void 0) > this.altitude) {
+          this.altitude = -this.highestStar.position.y;
         }
-        this.view.scroll.y = Math.max(0, this.heightAchieved);
+        this.score += ((this.altitude - prevAltitude) * this.multiplier) / Config.metersPerPoint;
+        this.view.scroll.y = Math.max(0, this.altitude);
+        this.prevMultiplier = this.multiplier;
         return this.multiplier = this.stars.length;
       }
     };
@@ -1666,9 +1712,9 @@
         ctx.fillText(text, x, y);
         return ctx.strokeText(text, x, y);
       };
-      this.view.clearScreen(this.skyColor(this.heightAchieved));
+      this.view.clearScreen(this.skyColor(this.altitude));
       this.view.draw(function(ctx) {
-        var box, t, _i, _j, _k, _l, _len, _len1, _len2, _len3, _len4, _len5, _m, _n, _ref1, _ref2, _ref3, _ref4, _ref5, _ref6, _results;
+        var box, t, _i, _j, _k, _l, _len, _len1, _len2, _len3, _len4, _len5, _len6, _m, _n, _o, _ref1, _ref2, _ref3, _ref4, _ref5, _ref6, _ref7, _results;
         _ref1 = _this.novae;
         for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
           t = _ref1[_i];
@@ -1689,16 +1735,21 @@
           t = _ref4[_l];
           t.render(ctx);
         }
-        _ref5 = _this.clouds;
+        _ref5 = _this.powerups;
         for (_m = 0, _len4 = _ref5.length; _m < _len4; _m++) {
           t = _ref5[_m];
           t.render(ctx);
         }
+        _ref6 = _this.clouds;
+        for (_n = 0, _len5 = _ref6.length; _n < _len5; _n++) {
+          t = _ref6[_n];
+          t.render(ctx);
+        }
         if (Config.debugDraw) {
-          _ref6 = _this.quadtree.getObjects();
+          _ref7 = _this.quadtree.getObjects();
           _results = [];
-          for (_n = 0, _len5 = _ref6.length; _n < _len5; _n++) {
-            box = _ref6[_n];
+          for (_o = 0, _len6 = _ref7.length; _o < _len6; _o++) {
+            box = _ref7[_o];
             ctx.beginPath();
             ctx.rect(box.left, box.top, box.width, box.height);
             ctx.strokeStyle = 'red';
@@ -1709,19 +1760,25 @@
       });
       if (this.isActive()) {
         return this.viewHUD.draw(function(ctx) {
-          var altitudeText, altitudeTextWidth;
-          ctx.font = "60px " + Config.hudFont;
-          ctx.strokeStyle = '#aaa';
-          ctx.fillStyle = '#eee';
-          ctx.lineWidth = 1.5;
-          ctx.setTransform(1, 0, 0, 1, 0, 0);
-          altitudeText = parseInt(_this.heightAchieved / 1000) + 'km';
-          ctx.fillText(altitudeText, 50, 100);
-          ctx.strokeText(altitudeText, 50, 100);
-          altitudeTextWidth = ctx.measureText(altitudeText).width;
-          if (_this.multiplier > 0) {
-            ctx.font = "30px " + Config.hudFont;
-            return fillstroke(ctx, 50 + altitudeTextWidth + 25, 100, "★x" + _this.multiplier);
+          var $m, altitudeText, multiplierText, scoreText;
+          altitudeText = parseInt(_this.altitude / 1000) + 'km';
+          scoreText = parseInt(_this.score);
+          multiplierText = "★x" + _this.multiplier;
+          $('#game-hud').find('.altitude').text(altitudeText);
+          $('#game-hud').find('.score').text(scoreText);
+          $m = $('#game-hud').find('.multiplier').text(multiplierText);
+          if (_this.multiplier > _this.prevMultiplier) {
+            $m.css({
+              'font-size': 60
+            });
+            clearInterval(_this.intervals.multiplierGrow);
+            return _this.intervals.multiplierGrow = setTimeout(function() {
+              return (function($m) {
+                return $m.animate({
+                  'font-size': 40
+                });
+              })($m);
+            }, 1000);
           }
         });
       }
@@ -1759,7 +1816,7 @@
       viewQuad = this.view.worldQuad();
       viewVolume = viewQuad.width() * viewQuad.height();
       prob = function(probFn, callback) {
-        if (Math.random() < dt * probFn(_this.heightAchieved)) {
+        if (Math.random() < dt * probFn(_this.altitude)) {
           return callback();
         }
       };
@@ -1778,13 +1835,19 @@
         return new klass(randomSpotOffscreen(klass.spriteImage.image.height), vel);
       };
       prob(Config.probability.cloud, function() {
-        return _this.powerups.push(new PlasmaCloud(randomSpotOffscreen(PlasmaCloud.canvas.height), new Vec(_.random(0, 0.1), 0)));
+        return _this.powerups.push(new PlasmaCloud(randomSpotOffscreen(PlasmaCloud.canvas.height), new Vec(_.random(0, 2), 0)));
       });
       prob(Config.probability.cloud, function() {
         return _this.clouds.push(make(Cloud, new Vec(_.random(2, 5), 0)));
       });
-      return prob(Config.probability.balloon, function() {
+      prob(Config.probability.balloon, function() {
         return _this.obstacles.push(make(Balloon, new Vec(_.random(-2, 2), 0)));
+      });
+      prob(Config.probability.satellite, function() {
+        return _this.obstacles.push(make(Satellite, new Vec(_.random(-2, 2), 0)));
+      });
+      return prob(Config.probability.cookie, function() {
+        return _this.obstacles.push(make(Cookie, new Vec(_.random(-2, 2), 0)));
       });
     };
 
@@ -1847,7 +1910,9 @@
         star = _ref1[_i];
         if (!star.isDead) {
           if (!deathQuad.onQuad(star.qbox.quad())) {
-            this.killStar(star);
+            this.killStar(star, {
+              quietly: true
+            });
           } else if (!star.isSafe()) {
             rawhits = star.qbox.getHits(this.quadtree);
             hits = rawhits.filter(function(h) {
@@ -1961,6 +2026,7 @@
               branch.stop();
               this.branches.push(left);
               this.branches.push(right);
+              sound.play('fork');
           }
         }
         return star.queue = [];
@@ -1976,23 +2042,29 @@
       return new Quad(x, y, w, h);
     };
 
-    PlayState.prototype.killStar = function(star) {
+    PlayState.prototype.killStar = function(star, _arg) {
+      var quietly;
+      quietly = (_arg != null ? _arg : {}).quietly;
       this.novae.push(new Nova(star));
-      return star.die();
+      star.die();
+      if (quietly) {
+        return sound.play('mininova');
+      } else {
+        return sound.play('nova');
+      }
     };
 
     PlayState.prototype.mergeStars = function(stars) {
-      var highest, star, _i, _len, _ref1, _results;
+      var highest, star, _i, _len, _ref1;
       highest = _.max(stars, function(s) {
         return -s.position.y;
       });
       _ref1 = _.without(stars, highest);
-      _results = [];
       for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
         star = _ref1[_i];
-        _results.push(star.merge(highest));
+        star.merge(highest);
       }
-      return _results;
+      return sound.play('merge');
     };
 
     PlayState.prototype.novaProfiling = function() {
@@ -2009,94 +2081,290 @@
 
   })(GameState);
 
-  GameOverState = (function(_super) {
-    __extends(GameOverState, _super);
+  InfoState = (function(_super) {
+    __extends(InfoState, _super);
 
-    function GameOverState() {
-      _ref1 = GameOverState.__super__.constructor.apply(this, arguments);
+    function InfoState() {
+      _ref1 = InfoState.__super__.constructor.apply(this, arguments);
       return _ref1;
     }
 
-    GameOverState.prototype.initialize = function() {
+    InfoState.prototype.enter = function() {};
+
+    InfoState.prototype.exit = function() {};
+
+    InfoState.prototype.update = function(dt) {
+      return $('#game-container').css({
+        'background-position': "0 " + (this.runTime * 100) + "px"
+      });
+    };
+
+    InfoState.prototype.render = function(ctx) {
+      var b, g, hyper, r, _ref2;
+      _ref2 = tinycolor(rainbow(2)).toRgb(), r = _ref2.r, g = _ref2.g, b = _ref2.b;
+      hyper = tinycolor(rainbow(4)).toRgb();
+      $('.rainbow').css({
+        color: "rgba(" + r + "," + g + "," + b + ",0.75)"
+      });
+      return $('.rainbow-hyper').css({
+        color: "rgba(" + hyper.r + "," + hyper.g + "," + hyper.b + ",0.9)"
+      });
+    };
+
+    return InfoState;
+
+  })(GameState);
+
+  TitleState = (function(_super) {
+    __extends(TitleState, _super);
+
+    function TitleState() {
+      _ref2 = TitleState.__super__.constructor.apply(this, arguments);
+      return _ref2;
+    }
+
+    TitleState.prototype.initialize = function() {
       var _this = this;
-      return _.delay(function() {
-        return _this.bind(_this.game.canvas, 'click', function(e) {
+      return this.bind(this.game.canvas, 'click', function(e) {
+        return _this.game.pushState(new PlayState);
+      });
+    };
+
+    TitleState.prototype.enter = function() {
+      var altitude, html, km, line, name, nameClass, score, scoreRows, scores, _i, _len;
+      this.view = new Viewport(this.game.canvas, {
+        scroll: new Vec(0, 0)
+      });
+      this.view.clearScreen();
+      html = "<h1 class=\"title rainbow\" style=\"margin-top: 10%\">\n	STARFRUIT:\n	ASCENSION\n</h1>\n<div class=\"blink white\" style=\"margin: 5% auto 5%\">click to play</div>\n";
+      scoreRows = '';
+      scores = Scores.get().slice(0, 11);
+      for (_i = 0, _len = scores.length; _i < _len; _i++) {
+        line = scores[_i];
+        score = line.score, altitude = line.altitude, name = line.name;
+        km = parseInt(altitude / 1000);
+        if (!name) {
+          nameClass = 'anonymous';
+        }
+        scoreRows += "<tr>\n	<td class=\"name " + nameClass + "\">" + (name || 'ANONYMOUS') + "</td>\n	<td class=\"altitude\">" + km + " km</td>\n	<td class=\"score\">" + score + "</td></tr>";
+      }
+      if (scoreRows !== '') {
+        html += "<table class=\"white\" style=\"margin: 100px auto 50px\">\n	<thead>\n		<tr><th colspan=\"3\"><h2>TOP PLAYERS</h2></th></tr>\n		<tr style=\"font-size: 15px;\">\n			<th>name</th>\n			<th>altitude</th>\n			<th>score</th>\n		</tr>\n		</thead>\n	<tbody>" + scoreRows + "</tbody>\n</table>";
+      }
+      $('#game-hud').html(html).show();
+      $('#game-hud').find('tbody tr:first-child').addClass('top-score');
+      $('#game-hud').find('tbody tr:first-child .score').addClass('rainbow');
+      return $('.blink').each(function(i, el) {
+        var elem;
+        elem = $(el);
+        return setInterval(function() {
+          if (elem.css('visibility') === 'hidden') {
+            return elem.css('visibility', 'visible');
+          } else {
+            return elem.css('visibility', 'hidden');
+          }
+        }, 500);
+      });
+    };
+
+    TitleState.prototype.exit = function() {};
+
+    TitleState.prototype.update = function(dt) {
+      return TitleState.__super__.update.apply(this, arguments);
+    };
+
+    TitleState.prototype.render = function(ctx) {
+      var view;
+      view = this.view;
+      return TitleState.__super__.render.apply(this, arguments);
+    };
+
+    return TitleState;
+
+  })(InfoState);
+
+  GameOverState = (function(_super) {
+    __extends(GameOverState, _super);
+
+    GameOverState.prototype.newRecord = false;
+
+    GameOverState.prototype.intervals = null;
+
+    function GameOverState() {
+      this.intervals = [];
+    }
+
+    GameOverState.prototype.initialize = function() {};
+
+    GameOverState.prototype.enter = function() {
+      var altitude, delay, html, line, lines, lowest, score, scores, _fn, _i, _len,
+        _this = this;
+      this.view = this.parent.viewHUD;
+      score = parseInt(this.parent.score);
+      altitude = this.parent.altitude;
+      scores = Scores.get();
+      if (scores.length >= Config.maxHighScores) {
+        lowest = scores[Config.maxHighScores - 1];
+      } else {
+        lowest = 0;
+      }
+      this.newRecord = score > lowest;
+      html = "<div class=\"game-over\">\n	<h1 class=\"rainbow stroke-white\" style=\"margin-top: 10%\">GAME OVER</h1>\n	<div class=\"stats\">\n\n	</div>\n	<div class=\"controls\">\n		<div class=\"button restart\">PLAY AGAIN</div>\n		<div class=\"button exit\">VIEW SCOREBOARD</div>\n	</div>\n</div>";
+      lines = ["YOU ASCENDED", "" + (parseInt(altitude / 1000)) + " kilometers", "FINAL SCORE", score];
+      delay = 500;
+      _fn = function(line, i) {
+        return _this.intervals.push(setTimeout(function() {
+          return $("<div class=\"stat\">" + line + "</div>").appendTo('.game-over .stats').animate({
+            top: 100 * i
+          }, 1000);
+        }, (i + 1) * delay));
+      };
+      for (i = _i = 0, _len = lines.length; _i < _len; i = ++_i) {
+        line = lines[i];
+        _fn(line, i);
+      }
+      setTimeout(function() {
+        $('#game-hud').find('.controls').show();
+        _this.bind('#game-hud .button.restart', 'click', function(e) {
           var game;
           game = _this.game;
           game.popState();
           game.popState();
           return game.pushState(new PlayState);
         });
-      }, 1000);
+        _this.bind('#game-hud .button.exit', 'click', function(e) {
+          var game;
+          game = _this.game;
+          game.popState();
+          game.popState();
+          return game.pushState(new TitleState);
+        });
+        _this.bind('#game-hud .button', 'mouseover', function(e) {
+          return $(e.currentTarget).addClass('rainbow-hyper');
+        });
+        _this.bind('#game-hud .button', 'mouseout', function(e) {
+          return $(e.currentTarget).removeClass('rainbow-hyper').css({
+            'color': 'inherit'
+          });
+        });
+        if (_this.newRecord) {
+          return Scores.add({
+            score: parseInt(score),
+            altitude: parseInt(altitude),
+            name: prompt("you set a new record!  what is your name, skillful player?")
+          });
+        }
+      }, 100);
+      return $('#game-hud').html(html).show();
     };
 
-    GameOverState.prototype.enter = function() {
-      return this.view = this.parent.viewHUD;
+    GameOverState.prototype.exit = function() {
+      var _i, _len, _ref3, _results;
+      _ref3 = this.intervals;
+      _results = [];
+      for (_i = 0, _len = _ref3.length; _i < _len; _i++) {
+        i = _ref3[_i];
+        _results.push(clearInterval(i));
+      }
+      return _results;
     };
-
-    GameOverState.prototype.exit = function() {};
 
     GameOverState.prototype.update = function(dt) {
-      var t, _i, _len, _ref2, _results;
-      _ref2 = this.parent.novae;
+      var t, _i, _len, _ref3, _results;
+      _ref3 = this.parent.novae;
       _results = [];
-      for (_i = 0, _len = _ref2.length; _i < _len; _i++) {
-        t = _ref2[_i];
+      for (_i = 0, _len = _ref3.length; _i < _len; _i++) {
+        t = _ref3[_i];
         _results.push(t.update(dt * Config.gameOverSlowdown));
       }
       return _results;
     };
 
     GameOverState.prototype.render = function(ctx) {
-      var b, g, r, view, _ref2,
-        _this = this;
+      var b, g, r, view, _ref3;
       this.parent.render(ctx);
-      _ref2 = tinycolor(rainbow()).toRgb(), r = _ref2.r, g = _ref2.g, b = _ref2.b;
+      _ref3 = tinycolor(rainbow()).toRgb(), r = _ref3.r, g = _ref3.g, b = _ref3.b;
       view = this.view;
       view.fillScreen("rgba(" + r + "," + g + "," + b + ",0.75)");
-      return view.draw(function(ctx) {
-        var color, font, height, line, lines, text, width, x, y, _i, _len, _results;
-        ctx.lineWidth = 1.5;
-        ctx.fillStyle = '#222';
-        ctx.strokeStyle = '#222';
-        lines = [
-          {
-            text: "YOU ASCENDED",
-            font: "70px " + Config.mainFont,
-            height: 70
-          }, {
-            text: "" + (parseInt(_this.parent.heightAchieved)) + " meters",
-            font: "100px " + Config.mainFont,
-            height: 100
-          }, {
-            text: "click to begin anew",
-            font: "80px " + Config.mainFont,
-            height: 100,
-            color: 'white'
-          }
-        ];
-        y = 100;
-        _results = [];
-        for (_i = 0, _len = lines.length; _i < _len; _i++) {
-          line = lines[_i];
-          text = line.text, font = line.font, height = line.height, color = line.color;
-          if (color != null) {
-            ctx.strokeStyle = color;
-            ctx.fillStyle = color;
-          }
-          ctx.font = font;
-          width = ctx.measureText(text).width;
-          x = view.width() / 2 - width / 2;
-          y += height * 1.5;
-          _results.push(ctx.strokeText(text, x, y));
-        }
-        return _results;
-      });
+      return GameOverState.__super__.render.apply(this, arguments);
     };
 
     return GameOverState;
 
-  })(GameState);
+  })(InfoState);
+
+  SoundSystem = (function() {
+    SoundSystem.prototype.ctx = null;
+
+    SoundSystem.prototype.sounds = null;
+
+    function SoundSystem() {
+      var AudioContext;
+      AudioContext = window.AudioContext || window.webkitAudioContext;
+      this.ctx = new AudioContext();
+      this.sounds = {};
+    }
+
+    SoundSystem.prototype.play = function(name) {
+      var att, buffer, source;
+      buffer = this.sounds[name];
+      source = this.ctx.createBufferSource();
+      source.buffer = buffer;
+      if (name === 'nova' || name === 'mininova') {
+        att = this.ctx.createGainNode();
+        att.gain.value = 0.5;
+        source.connect(att);
+        att.connect(this.ctx.destination);
+      } else {
+        source.connect(this.ctx.destination);
+      }
+      return source.start(0);
+    };
+
+    SoundSystem.prototype.load = function(name, url, callback) {
+      var xhr,
+        _this = this;
+      xhr = new XMLHttpRequest();
+      xhr.open("GET", url, true);
+      xhr.responseType = "arraybuffer";
+      xhr.onload = function() {
+        return _this.ctx.decodeAudioData(xhr.response, function(buffer) {
+          _this.sounds[name] = buffer;
+          if (typeof callback === 'function') {
+            return callback(source);
+          }
+        }, function() {
+          return console.error('audio loading error', arguments);
+        });
+      };
+      return xhr.send();
+    };
+
+    return SoundSystem;
+
+  })();
+
+  window.Scores = {
+    get: function() {
+      var all;
+      all = $.parseJSON(localStorage.getItem('high_scores')) || [];
+      return all.slice(0, Config.maxHighScores).sort(function(a, b) {
+        return b.score - a.score;
+      });
+    },
+    clear: function() {
+      return localStorage.removeItem('high_scores');
+    },
+    add: function(data) {
+      var all;
+      all = this.get();
+      all.push(data);
+      all.sort(function(a, b) {
+        return b.score - a.score;
+      });
+      return localStorage.setItem('high_scores', JSON.stringify(all));
+    }
+  };
 
   (function() {
     var numRainbowColors, p, rainbowColors;
@@ -2110,28 +2378,44 @@
       }
       return _results;
     })();
-    return window.rainbow = function(factor) {
+    window.rainbow = function(factor, alpha) {
+      var color, tc;
       if (factor == null) {
         factor = 1;
       }
-      return rainbowColors[(globals.rainbowIndex * factor) % rainbowColors.length];
+      if (alpha == null) {
+        alpha = 1;
+      }
+      color = rainbowColors[(globals.rainbowIndex * factor) % rainbowColors.length];
+      if (alpha < 1) {
+        tc = tinycolor(color);
+        tc.setAlpha(alpha);
+        color = tc.toRgbString();
+      }
+      return color;
     };
+    window.sound = new SoundSystem;
+    sound.load("fork", "snd/fork.wav");
+    sound.load("merge", "snd/merge.wav");
+    sound.load("nova", "snd/nova.wav");
+    return sound.load("mininova", "snd/mininova.wav");
   })();
 
   $(function() {
     var Game, states;
     states = {
-      play: new PlayState
+      play: new PlayState,
+      title: new TitleState,
+      gameover: new GameOverState
     };
     Game = new GameEngine({
       canvas: $('#game').get(0),
-      initialState: states.play,
-      fps: 50,
+      initialState: states.title,
+      fps: 60,
       preUpdate: function() {
         return globals.rainbowIndex += 1;
       }
     });
-    globals.quadtree = states.play.quadtree;
     globals.rainbowIndex = 0;
     return Game.start();
   });

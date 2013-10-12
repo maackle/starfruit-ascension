@@ -1,0 +1,244 @@
+
+@font-face {
+    font-family: 'lemieszregular';
+    src: url('/font/lemiesz_regular_macroman/Lemiesz-webfont.eot');
+    src: url('/font/lemiesz_regular_macroman/Lemiesz-webfont.eot?#iefix') format('embedded-opentype'),
+         url('/font/lemiesz_regular_macroman/Lemiesz-webfont.woff') format('woff'),
+         url('/font/lemiesz_regular_macroman/Lemiesz-webfont.ttf') format('truetype'),
+         url('/font/lemiesz_regular_macroman/Lemiesz-webfont.svg#lemieszregular') format('svg');
+    font-weight: normal;
+    font-style: normal;
+
+}
+
+@font-face {
+    font-family: 'troglodytenfregular';
+    src: url('/font/troglodytenf_regular_macroman/TROG-webfont.eot');
+    src: url('/font/troglodytenf_regular_macroman/TROG-webfont.eot?#iefix') format('embedded-opentype'),
+         url('/font/troglodytenf_regular_macroman/TROG-webfont.woff') format('woff'),
+         url('/font/troglodytenf_regular_macroman/TROG-webfont.ttf') format('truetype'),
+         url('/font/troglodytenf_regular_macroman/TROG-webfont.svg#troglodytenfregular') format('svg');
+    font-weight: normal;
+    font-style: normal;
+
+}
+
+@font-face {
+    font-family: 'virgo_01regular';
+    src: url('/font/virgo01_regular_macroman/virgo-webfont.eot');
+    src: url('/font/virgo01_regular_macroman/virgo-webfont.eot?#iefix') format('embedded-opentype'),
+         url('/font/virgo01_regular_macroman/virgo-webfont.woff') format('woff'),
+         url('/font/virgo01_regular_macroman/virgo-webfont.ttf') format('truetype'),
+         url('/font/virgo01_regular_macroman/virgo-webfont.svg#virgo_01regular') format('svg');
+    font-weight: normal;
+    font-style: normal;
+
+}
+
+html, body {
+	margin: 0;
+	padding: 0;
+	width: 100%;
+	height: 100%;
+	/*font-family: lemieszregular;*/
+}
+
+body {
+	background: #111;
+	text-align: center; 
+	position: relative;
+}
+
+canvas {
+	image-rendering: -moz-crisp-edges;
+	image-rendering: -o-crisp-edges;
+	image-rendering: -webkit-optimize-contrast;
+	-ms-interpolation-mode: nearest-neighbor;
+}
+
+h1, .huge {
+	font-size: 90px;
+}
+h2, .big {
+	font-size: 60px;
+}
+h3 {
+	font-size: 45px;
+}
+
+h1, h2, h3 {
+	margin: 10px inherit;
+}
+
+.white { color: white; }
+.black { color: black; }
+.stroke-white {
+	text-shadow: 0 0 5px white;
+}
+
+#game-container {
+	position: relative;
+	margin: auto;
+	background: url('img/starry-bg.png') repeat;
+	z-index: 5;
+	width: 1000px;
+	height: 100%;
+	box-shadow: 0 0 4px rgba(255, 255, 255, 0.5);
+}
+
+#game-hud {
+	font-family: 'virgo_01regular';
+	font-size: 30px;
+	width: 100%;
+	height: 100%;
+	position: absolute;
+	top: 0;
+	left: 0;
+	/*color: black;*/
+	/*text-shadow: 0 0 5px white;*/
+	cursor: default;
+	pointer-events: none;
+}
+
+#game-hud * {
+
+}
+
+#game {
+
+}
+
+
+img.logo {
+	z-index: 1;
+	position: absolute;
+	top: 50%;
+	margin-top: -400px;
+}
+
+img.logo-left {
+	left: 40px;
+}
+
+img.logo-right {
+	right: 40px;
+}
+
+@media (max-width: 1200px) {
+	img.logo {
+		display: none;
+	}
+}
+
+/**** TITLE SCREEN ****/
+
+table {
+	width: 80%;
+	text-align: center;
+	color: white;
+	margin: auto;
+	font-size: 30px;
+}
+
+table th {
+
+}
+
+.top-score {
+	font-size: 1.5em;
+}
+
+.anonymous {
+	color: #444;
+}
+
+
+/**** GAMEPLAY HUD ****/
+
+.play-hud {
+	color: white;
+}
+
+.altitude-container {
+	float: left;
+	margin: 50px 0 0 50px;
+}
+
+.score-container {
+	float: right;
+	margin: 50px 50px 0 0;
+}
+
+.multiplier-container {
+	width: 200px;
+	position: absolute;
+	top: 50px;
+	left: 50%;
+	margin-left: -100px;
+}
+
+.label {
+	font-size: 20px;
+}
+
+.altitude-label {
+	text-align: left;
+}
+
+.score-label {
+	text-align: right;
+}
+
+.altitude-container .altitude, .score-container .score {
+	font-size: 60px;
+}
+
+.multiplier {
+	font-size: 40px;
+	vertical-align: middle;
+}
+
+
+/***** GAME OVER *****/
+
+.stats {
+	position: relative;
+	margin-top: 50px;
+	width: 100%;
+	color: #222;
+}
+
+.stats .stat {
+	position: absolute;
+	top: 2000px;
+	width: 100%;
+	text-align: center;
+	font-size: 30px;
+}
+
+.stats .stat:nth-child(odd) {
+	font-size: 30px;
+	margin-top: 40px;
+}
+
+.stats .stat:nth-child(even) {
+	font-size: 60px;
+}
+
+.game-over .controls {
+	display: none;
+	width: 100%;
+	position: absolute;
+	bottom: 10px;
+	text-align: center;
+}
+.game-over .controls .button {
+	pointer-events: auto;
+	cursor: pointer;
+	font-size: 60px;
+	padding: 10px 0;
+	margin: 25px auto;
+	width: 100%;
+	background: rgba(255, 255, 255, 0.5);
+}
+

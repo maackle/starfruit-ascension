@@ -121,7 +121,6 @@ class Star extends Collidable
 				ctx.save()
 				ctx.scale r, r
 				GFX.drawLineString ctx, Star.vertices, closed: true
-
 				ctx.lineWidth = 1
 				ctx.fill()
 				ctx.restore()
@@ -382,7 +381,16 @@ class PlasmaCloud extends Powerup
 		super
 
 	render: (ctx) ->  # assuming all Obstacles have Sprites
-		@sprite.draw(position: @position)(ctx)
+		{x, y} = @qbox.position
+		r = @qbox.width / 2
+		ctx.beginPath()
+		ctx.arc x, y, r, 0, Math.PI * 2
+		ctx.fillStyle = rainbow(2, 0.25)
+		ctx.strokeStyle = 'white'
+		ctx.lineWidth = 1
+		ctx.fill()
+		ctx.stroke()
+		# @sprite.draw(position: @position)(ctx)
 
 	bless: (star) ->
 		if star not in @_blessed and not star.isSafe()

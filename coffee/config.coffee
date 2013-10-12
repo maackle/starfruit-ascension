@@ -13,9 +13,11 @@ Config =
 	# GENERAL
 	mainFont: 'Monoton'
 	hudFont: 'Offside'
-	debugDraw: yes 			# draw AABBs around Collidables
+	debugDraw: no 			# draw AABBs around Collidables
 	autoFork: no 				# fork after branchDistanceMax
 
+	maxHighScores: 8 		# limit number of high scores saved
+	metersPerPoint: 100
 	
 	# BRANCHES + STARS
 	starSpeed: 550 				# normal speed
@@ -47,28 +49,32 @@ Config =
 		x: 200
 		y: 200
 
-	probability:
+	probability: do =>
+		NF = Atmosphere.noflyzone
+		T = Atmosphere.tropopause
+		S = Atmosphere.stratopause
+		M = Atmosphere.mesopause
 		cloud: (height) ->
 			# return 1
-			if height < Atmosphere.noflyzone then 1
-			else if height < Atmosphere.tropopause then 0.6
-			else if height < Atmosphere.stratopause then 1.25
-			else if height < Atmosphere.mesopause then 0.33
+			if height < NF then 1
+			else if height < T then 0.6
+			else if height < S then 1.25
+			else if height < M then 0.33
 			else 0
 		balloon: (height) ->
-			if height < Atmosphere.noflyzone then 0
-			else if height < Atmosphere.tropopause then 0.75
-			else if height < Atmosphere.stratopause then 0.15
+			if height < NF then 0
+			else if height < T then 0.75
+			else if height < S then 0.15
 			else 0
 		satellite: (height) ->
-			if height > Atmosphere.stratopause then 0.75
-			else 0
+			if height < S then 0
+			else 0.75
 		cookie: (height) ->
 			base = 0.2
-			if height < Atmosphere.noflyzone then 0
-			else if height > Atmosphere.stratopause then base
-			else if height > Atmosphere.mesopause then base + (height - Atmosphere.mesopause) / Atmosphere.mesopause
-			else 0.05
+			if height < NF then 0
+			else if height < S then 0.1
+			else if height < M then base
+			else base + (height - M) / M
 
 	images:
 		star: new ImageResource 'img/star-32.png'

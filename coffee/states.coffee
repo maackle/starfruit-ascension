@@ -2,7 +2,8 @@
 class PlayState extends GameState
 
 	highestStar: null
-	heightAchieved: 0
+	altitude: 0
+	score: 0
 
 	view: null
 	viewHUD: null
@@ -15,6 +16,7 @@ class PlayState extends GameState
 	novae: null
 	stars: null
 	branches: null
+	intervals: null
 
 	constructor: ->
 		numRainbowColors = 256
@@ -26,6 +28,7 @@ class PlayState extends GameState
 		@novae = []
 		@stars = []
 		@branches = []
+		@intervals = {}
 
 	initialize: ->
 		star = new Star (new Vec 0, 0), -Math.PI / 2
@@ -33,8 +36,26 @@ class PlayState extends GameState
 		branch = new Branch(new Vec 0, 0)
 		branch.setStar(star)
 		@branches.push branch
+		globals.quadtree = @quadtree  # TODO: no globals
 
 	enter: ->
+		html = """
+		<div class="play-hud">
+			<div class="altitude-container">
+				<div class="label altitude-label">altitude</div>
+				<div class="main altitude">40km</div>
+			</div>
+			<div class="score-container">
+				<div class="label score-label">score</div>
+				<div class="main score">2555</div>
+			</div>
+			<div class="multiplier-container">
+				<div class="label multiplier-label"></div>
+				<div class="multiplier"></div>
+			</div>
+		</div>
+		"""
+		$('#game-hud').html(html).show()
 		@view ?= new Viewport @game.canvas,
 			scroll: new Vec 0, 0
 			anchor: 'center'
@@ -67,8 +88,8 @@ class PlayState extends GameState
 		@bringOutTheDead()
 		@processQueue star for star in @stars
 
-		$('body').css
-			'background-position': "0 #{@heightAchieved / 10}px"
+		$('#game-container').css
+			'background-position': "0 #{@altitude / 10}px"
 
 		if @stars.length > 0
 
@@ -81,9 +102,12 @@ class PlayState extends GameState
 
 			@highestStar = _.min @stars, (s) -> s.position.y
 			[w, h] = @view.dimensions()
-			@heightAchieved = -@highestStar.position.y if -@highestStar?.position.y > @heightAchieved
-			@view.scroll.y = Math.max 0, @heightAchieved
+			prevAltitude = @altitude
+			@altitude = -@highestStar.position.y if -@highestStar?.position.y > @altitude
+			@score += ((@altitude - prevAltitude) * @multiplier) / Config.metersPerPoint
+			@view.scroll.y = Math.max 0, @altitude
 
+			@prevMultiplier = @multiplier
 			@multiplier = @stars.length
 
 
@@ -92,12 +116,13 @@ class PlayState extends GameState
 			ctx.fillText text, x, y
 			ctx.strokeText text, x, y
 
-		@view.clearScreen(@skyColor(@heightAchieved))
+		@view.clearScreen(@skyColor(@altitude))
 		@view.draw (ctx) =>
 			t.render(ctx) for t in @novae
 			t.render(ctx) for t in @branches
 			t.render(ctx) for t in @stars
 			t.render(ctx) for t in @obstacles
+			t.render(ctx) for t in @powerups
 			t.render(ctx) for t in @clouds
 
 			if Config.debugDraw
@@ -109,19 +134,20 @@ class PlayState extends GameState
 
 		if @isActive()
 			@viewHUD.draw (ctx) =>
-				ctx.font = "60px #{Config.hudFont}"
-				ctx.strokeStyle = '#aaa'
-				ctx.fillStyle = '#eee'
-				ctx.lineWidth = 1.5
-				ctx.setTransform(1, 0, 0, 1, 0, 0)
-				altitudeText = parseInt(@heightAchieved/1000) + 'km'
-				ctx.fillText(altitudeText, 50, 100)
-				ctx.strokeText(altitudeText, 50, 100)
-				altitudeTextWidth = ctx.measureText(altitudeText).width
+				altitudeText = parseInt(@altitude/1000) + 'km'
+				scoreText = parseInt(@score)
+				multiplierText = "★x#{@multiplier}"
 
-				if @multiplier > 0
-					ctx.font = "30px #{Config.hudFont}"
-					fillstroke ctx, 50 + altitudeTextWidth + 25, 100, "★x#{@multiplier}"
+				$('#game-hud').find('.altitude').text(altitudeText)
+				$('#game-hud').find('.score').text(scoreText)
+				$m = $('#game-hud').find('.multiplier').text(multiplierText)
+				if @multiplier > @prevMultiplier 
+					$m.css('font-size': 60)
+					clearInterval(@intervals.multiplierGrow)
+					@intervals.multiplierGrow = setTimeout =>
+						do ($m) =>
+							$m.animate('font-size': 40)
+					, 1000
 
 
 	skyColor: (height) ->
@@ -148,7 +174,7 @@ class PlayState extends GameState
 		# console.log viewQuad.bottom(), viewQuad.top()
 
 		prob = (probFn, callback) =>
-			if Math.random() < dt * probFn(@heightAchieved) then callback()
+			if Math.random() < dt * probFn(@altitude) then callback()
 
 		randomSpotOffscreen = (objectHeight=0) =>
 			x = _.random viewQuad.left(), viewQuad.right()
@@ -161,15 +187,15 @@ class PlayState extends GameState
 			new klass randomSpotOffscreen(klass.spriteImage.image.height), vel
 
 		prob Config.probability.cloud, =>
-			@powerups.push (new PlasmaCloud randomSpotOffscreen(PlasmaCloud.canvas.height), new Vec(_.random(0, 0.1), 0) )
+			@powerups.push (new PlasmaCloud randomSpotOffscreen(PlasmaCloud.canvas.height), new Vec(_.random(0, 2), 0) )
 		prob Config.probability.cloud, =>
 			@clouds.push make Cloud, new Vec(_.random(2, 5), 0)
 		prob Config.probability.balloon, =>
 			@obstacles.push make Balloon, new Vec(_.random(-2, 2), 0)
-		# prob Config.probability.balloon, =>
-		# 	@obstacles.push new Balloon randomSpotOffscreen(), new Vec(_.random(-2, 2), 0)
-		# prob Config.probability.balloon, =>
-		# 	@obstacles.push new Balloon randomSpotOffscreen(), new Vec(_.random(-2, 2), 0)
+		prob Config.probability.satellite, =>
+			@obstacles.push make Satellite, new Vec(_.random(-2, 2), 0)
+		prob Config.probability.cookie, =>
+			@obstacles.push make Cookie, new Vec(_.random(-2, 2), 0)
 
 	transition: ->
 		if @stars.length == 0
@@ -188,7 +214,8 @@ class PlayState extends GameState
 		deathQuad = @deathQuad()
 		for star in @stars when not star.isDead
 			if not deathQuad.onQuad star.qbox.quad()
-				@killStar star
+				@killStar star,
+					quietly: true
 			else if not star.isSafe()
 				rawhits = star.qbox.getHits(@quadtree)
 				hits = rawhits.filter (h) =>
@@ -232,6 +259,7 @@ class PlayState extends GameState
 						branch.stop()
 						@branches.push left
 						@branches.push right
+						sound.play 'fork'
 			star.queue = []
 
 			
@@ -242,13 +270,18 @@ class PlayState extends GameState
 		h += Config.autokillTolerance.y
 		new Quad x, y, w, h
 
-	killStar: (star) ->
+	killStar: (star, {quietly}={}) ->
 		@novae.push new Nova star
 		star.die()
+		if quietly
+			sound.play 'mininova'
+		else
+			sound.play 'nova'
 
 	mergeStars: (stars) ->
 		highest = _.max stars, (s) -> -s.position.y
 		star.merge(highest) for star in _.without stars, highest
+		sound.play 'merge'
 
 	novaProfiling: ->		
 		if @novae.length > 0 and not window.profiling
@@ -259,22 +292,171 @@ class PlayState extends GameState
 			window.profiling = false
 
 
+class InfoState extends GameState
 
-class GameOverState extends GameState
+	enter: -> 
+
+	exit: ->
+
+	update: (dt) ->
+		$('#game-container').css
+			'background-position': "0 #{@runTime * 100}px"
+
+	render: (ctx) ->
+		{r,g,b} = tinycolor(rainbow(2)).toRgb()
+		hyper = tinycolor(rainbow(4)).toRgb()
+		$('.rainbow').css
+			color: "rgba(#{r},#{g},#{b},0.75)"
+		$('.rainbow-hyper').css
+			color: "rgba(#{hyper.r},#{hyper.g},#{hyper.b},0.9)"
+
+
+
+class TitleState extends InfoState
 
 	initialize: ->
-		_.delay =>
-			@bind @game.canvas, 'click', (e) =>
+		@bind @game.canvas, 'click', (e) =>
+			@game.pushState new PlayState
+
+	enter: ->
+
+		@view = new Viewport @game.canvas,
+			scroll: new Vec 0, 0
+		@view.clearScreen()
+		html = """
+	<h1 class="title rainbow" style="margin-top: 10%">
+		STARFRUIT:
+		ASCENSION
+	</h1>
+	<div class="blink white" style="margin: 5% auto 5%">click to play</div>
+
+		"""
+		scoreRows = ''
+		scores = Scores.get()[0..10]
+		for line in scores
+			{score, altitude, name} = line
+			km = parseInt(altitude / 1000)
+			nameClass = 'anonymous' if not name
+			scoreRows += """
+				<tr>
+					<td class="name #{nameClass}">#{name or 'ANONYMOUS'}</td>
+					<td class="altitude">#{km} km</td>
+					<td class="score">#{score}</td></tr>
+			"""
+		if scoreRows isnt ''
+			html += """
+			<table class="white" style="margin: 100px auto 50px">
+				<thead>
+					<tr><th colspan="3"><h2>TOP PLAYERS</h2></th></tr>
+					<tr style="font-size: 15px;">
+						<th>name</th>
+						<th>altitude</th>
+						<th>score</th>
+					</tr>
+					</thead>
+				<tbody>#{scoreRows}</tbody>
+			</table>
+			"""
+
+		$('#game-hud').html(html).show()
+		$('#game-hud').find('tbody tr:first-child').addClass('top-score')
+		$('#game-hud').find('tbody tr:first-child .score').addClass('rainbow')
+		$('.blink').each (i, el) ->
+			elem = $(el)
+			setInterval ->
+				if (elem.css('visibility') == 'hidden')
+					elem.css('visibility', 'visible')
+				else
+					elem.css('visibility', 'hidden')
+			, 500
+
+
+	exit: ->
+
+	update: (dt) ->
+		super
+
+	render: (ctx) ->
+		view = @view
+		# view.fillScreen("rgba(#{r},#{g},#{b},0.75)")
+		super
+
+class GameOverState extends InfoState
+
+	newRecord: false
+	intervals: null
+
+	constructor: ->
+		@intervals = []
+
+	initialize: ->
+		
+
+	enter: ->
+		@view = @parent.viewHUD
+		score = parseInt(@parent.score)
+		altitude = @parent.altitude
+		scores = Scores.get()
+		if scores.length >= Config.maxHighScores
+			lowest = scores[Config.maxHighScores - 1]
+		else
+			lowest = 0
+		@newRecord = score > lowest
+		html = """
+			<div class="game-over">
+				<h1 class="rainbow stroke-white" style="margin-top: 10%">GAME OVER</h1>
+				<div class="stats">
+
+				</div>
+				<div class="controls">
+					<div class="button restart">PLAY AGAIN</div>
+					<div class="button exit">VIEW SCOREBOARD</div>
+				</div>
+			</div>
+		"""
+		lines = [
+			"YOU ASCENDED",
+			"#{parseInt(altitude/1000)} kilometers",
+			"FINAL SCORE",
+			score,
+		]
+		delay = 500
+		for line, i in lines
+			do (line, i) => 
+				@intervals.push setTimeout =>
+					$("""<div class="stat">#{line}</div>""").appendTo('.game-over .stats').animate
+						top: 100*i
+					, 1000
+				, (i+1)*delay
+		setTimeout =>
+			$('#game-hud').find('.controls').show()
+			@bind '#game-hud .button.restart', 'click', (e) =>
 				game = @game
 				game.popState()  # this (GameOverState)
 				game.popState()  # old (PlayState)
 				game.pushState new PlayState
-		, 1000
+			@bind '#game-hud .button.exit', 'click', (e) =>
+				game = @game
+				game.popState()  # this (GameOverState)
+				game.popState()  # old (PlayState)
+				game.pushState new TitleState
+			@bind '#game-hud .button', 'mouseover', (e) =>
+				$(e.currentTarget).addClass('rainbow-hyper')
+			@bind '#game-hud .button', 'mouseout', (e) =>
+				$(e.currentTarget).removeClass('rainbow-hyper').css
+					'color': 'inherit'
+			if @newRecord
+				Scores.add
+					score: parseInt(score)
+					altitude: parseInt(altitude)
+					name: prompt("you set a new record!  what is your name, skillful player?")
+		, 100
 
-	enter: ->
-		@view = @parent.viewHUD
+		$('#game-hud').html(html).show()
+
 
 	exit: ->
+		clearInterval(i) for i in @intervals
 
 	update: (dt) ->
 		t.update(dt * Config.gameOverSlowdown) for t in @parent.novae
@@ -284,24 +466,5 @@ class GameOverState extends GameState
 		{r,g,b} = tinycolor(rainbow()).toRgb()
 		view = @view
 		view.fillScreen("rgba(#{r},#{g},#{b},0.75)")
-		view.draw (ctx) =>
-			ctx.lineWidth = 1.5
-			ctx.fillStyle = '#222'
-			ctx.strokeStyle = '#222'
-			lines = [
-				{ text: "YOU ASCENDED", font: "70px #{Config.mainFont}", height: 70 }
-				{ text: "#{parseInt(@parent.heightAchieved)} meters", font: "100px #{Config.mainFont}", height: 100 }
-				{ text: "click to begin anew", font: "80px #{Config.mainFont}", height: 100, color: 'white' }
-			]
-			y = 100
-			for line in lines
-				{text, font, height, color} = line
-				if color?
-					ctx.strokeStyle = color
-					ctx.fillStyle = color
-				ctx.font = font
-				{width} = ctx.measureText(text)
-				x = view.width() / 2 - width / 2
-				y += height * 1.5
-				# ctx.fillText(text, x, y)
-				ctx.strokeText(text, x, y)
+		super
+			
