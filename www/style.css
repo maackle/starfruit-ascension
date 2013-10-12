@@ -1,11 +1,11 @@
 
 @font-face {
     font-family: 'lemieszregular';
-    src: url('/font/lemiesz_regular_macroman/Lemiesz-webfont.eot');
-    src: url('/font/lemiesz_regular_macroman/Lemiesz-webfont.eot?#iefix') format('embedded-opentype'),
-         url('/font/lemiesz_regular_macroman/Lemiesz-webfont.woff') format('woff'),
-         url('/font/lemiesz_regular_macroman/Lemiesz-webfont.ttf') format('truetype'),
-         url('/font/lemiesz_regular_macroman/Lemiesz-webfont.svg#lemieszregular') format('svg');
+    src: url('font/lemiesz_regular_macroman/Lemiesz-webfont.eot');
+    src: url('font/lemiesz_regular_macroman/Lemiesz-webfont.eot?#iefix') format('embedded-opentype'),
+         url('font/lemiesz_regular_macroman/Lemiesz-webfont.woff') format('woff'),
+         url('font/lemiesz_regular_macroman/Lemiesz-webfont.ttf') format('truetype'),
+         url('font/lemiesz_regular_macroman/Lemiesz-webfont.svg#lemieszregular') format('svg');
     font-weight: normal;
     font-style: normal;
 
@@ -13,11 +13,11 @@
 
 @font-face {
     font-family: 'troglodytenfregular';
-    src: url('/font/troglodytenf_regular_macroman/TROG-webfont.eot');
-    src: url('/font/troglodytenf_regular_macroman/TROG-webfont.eot?#iefix') format('embedded-opentype'),
-         url('/font/troglodytenf_regular_macroman/TROG-webfont.woff') format('woff'),
-         url('/font/troglodytenf_regular_macroman/TROG-webfont.ttf') format('truetype'),
-         url('/font/troglodytenf_regular_macroman/TROG-webfont.svg#troglodytenfregular') format('svg');
+    src: url('font/troglodytenf_regular_macroman/TROG-webfont.eot');
+    src: url('font/troglodytenf_regular_macroman/TROG-webfont.eot?#iefix') format('embedded-opentype'),
+         url('font/troglodytenf_regular_macroman/TROG-webfont.woff') format('woff'),
+         url('font/troglodytenf_regular_macroman/TROG-webfont.ttf') format('truetype'),
+         url('font/troglodytenf_regular_macroman/TROG-webfont.svg#troglodytenfregular') format('svg');
     font-weight: normal;
     font-style: normal;
 
@@ -25,11 +25,11 @@
 
 @font-face {
     font-family: 'virgo_01regular';
-    src: url('/font/virgo01_regular_macroman/virgo-webfont.eot');
-    src: url('/font/virgo01_regular_macroman/virgo-webfont.eot?#iefix') format('embedded-opentype'),
-         url('/font/virgo01_regular_macroman/virgo-webfont.woff') format('woff'),
-         url('/font/virgo01_regular_macroman/virgo-webfont.ttf') format('truetype'),
-         url('/font/virgo01_regular_macroman/virgo-webfont.svg#virgo_01regular') format('svg');
+    src: url('font/virgo01_regular_macroman/virgo-webfont.eot');
+    src: url('font/virgo01_regular_macroman/virgo-webfont.eot?#iefix') format('embedded-opentype'),
+         url('font/virgo01_regular_macroman/virgo-webfont.woff') format('woff'),
+         url('font/virgo01_regular_macroman/virgo-webfont.ttf') format('truetype'),
+         url('font/virgo01_regular_macroman/virgo-webfont.svg#virgo_01regular') format('svg');
     font-weight: normal;
     font-style: normal;
 

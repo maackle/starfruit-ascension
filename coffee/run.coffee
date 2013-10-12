@@ -5,34 +5,38 @@ class SoundSystem
 	sounds: null
 
 	constructor: ->
-		AudioContext = window.AudioContext or window.webkitAudioContext
-		@ctx = new AudioContext()
-		@sounds = {}
+	play: ->
+	load: ->
 
-	play: (name) ->
-		buffer = @sounds[name]
-		source = @ctx.createBufferSource()
-		source.buffer = buffer
-		if name in ['nova', 'mininova']
-			att = @ctx.createGainNode()
-			att.gain.value = 0.5
-			source.connect att
-			att.connect @ctx.destination
-		else
-			source.connect @ctx.destination
-		source.start 0
+	# constructor: ->
+	# 	AudioContext = window.AudioContext or window.webkitAudioContext
+	# 	@ctx = new AudioContext()
+	# 	@sounds = {}
 
-	load: (name, url, callback) ->
-		xhr = new XMLHttpRequest()
-		xhr.open("GET", url, true)
-		xhr.responseType = "arraybuffer"
-		xhr.onload = => 
-			@ctx.decodeAudioData xhr.response, (buffer) =>
-				@sounds[name] = buffer
-				callback source if typeof callback is 'function'
-			, =>
-				console.error 'audio loading error', arguments
-		xhr.send()
+	# play: (name) ->
+	# 	buffer = @sounds[name]
+	# 	source = @ctx.createBufferSource()
+	# 	source.buffer = buffer
+	# 	if name in ['nova', 'mininova']
+	# 		att = @ctx.createGainNode()
+	# 		att.gain.value = 0.5
+	# 		source.connect att
+	# 		att.connect @ctx.destination
+	# 	else
+	# 		source.connect @ctx.destination
+	# 	source.start 0
+
+	# load: (name, url, callback) ->
+	# 	xhr = new XMLHttpRequest()
+	# 	xhr.open("GET", url, true)
+	# 	xhr.responseType = "arraybuffer"
+	# 	xhr.onload = => 
+	# 		@ctx.decodeAudioData xhr.response, (buffer) =>
+	# 			@sounds[name] = buffer
+	# 			callback source if typeof callback is 'function'
+	# 		, =>
+	# 			console.error 'audio loading error', arguments
+	# 	xhr.send()
 
 window.Scores =
 

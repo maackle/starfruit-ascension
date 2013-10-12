@@ -2312,47 +2312,11 @@
 
     SoundSystem.prototype.sounds = null;
 
-    function SoundSystem() {
-      var AudioContext;
-      AudioContext = window.AudioContext || window.webkitAudioContext;
-      this.ctx = new AudioContext();
-      this.sounds = {};
-    }
+    function SoundSystem() {}
 
-    SoundSystem.prototype.play = function(name) {
-      var att, buffer, source;
-      buffer = this.sounds[name];
-      source = this.ctx.createBufferSource();
-      source.buffer = buffer;
-      if (name === 'nova' || name === 'mininova') {
-        att = this.ctx.createGainNode();
-        att.gain.value = 0.5;
-        source.connect(att);
-        att.connect(this.ctx.destination);
-      } else {
-        source.connect(this.ctx.destination);
-      }
-      return source.start(0);
-    };
+    SoundSystem.prototype.play = function() {};
 
-    SoundSystem.prototype.load = function(name, url, callback) {
-      var xhr,
-        _this = this;
-      xhr = new XMLHttpRequest();
-      xhr.open("GET", url, true);
-      xhr.responseType = "arraybuffer";
-      xhr.onload = function() {
-        return _this.ctx.decodeAudioData(xhr.response, function(buffer) {
-          _this.sounds[name] = buffer;
-          if (typeof callback === 'function') {
-            return callback(source);
-          }
-        }, function() {
-          return console.error('audio loading error', arguments);
-        });
-      };
-      return xhr.send();
-    };
+    SoundSystem.prototype.load = function() {};
 
     return SoundSystem;
 
