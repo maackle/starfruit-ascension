@@ -38,17 +38,17 @@ window.Scores =
 
 	get: -> 
 		all = $.parseJSON(localStorage.getItem('high_scores')) or []
+		all = all.filter (a) -> a.version is VERSION
 		all[0...Config.maxHighScores].sort (a,b) -> b.score - a.score
 
 	clear: -> localStorage.removeItem('high_scores')
 
 	add: (data) ->
+		data.version = VERSION
 		all = @get()
 		all.push data
 		all.sort (a,b) -> b.score - a.score
 		localStorage.setItem('high_scores', JSON.stringify(all))
-
-
 
 
 do ->

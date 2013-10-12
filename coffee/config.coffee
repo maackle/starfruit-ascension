@@ -8,6 +8,8 @@ Atmosphere =
 	mesopause: 80000 * atmoscale
 	thermopause: 500000 * atmoscale
 
+VERSION = 0.1
+
 Config = 
 
 	# GENERAL
@@ -41,6 +43,8 @@ Config =
 	novaMaxRadius: 2000 		# when to kill a nova
 	novaExplosionSpeed: 200 	# pixels per second
 
+	obstaclesPerPlasmaCloud: 8 # only one plasma cloud shows up for this many obstacles
+
 	mergeDrawTime: 0.5 			# how long to animate a star merge in seconds
 
 	gameOverSlowdown: 0.2		# slowdown by this much on game over screen
@@ -54,6 +58,8 @@ Config =
 		T = Atmosphere.tropopause
 		S = Atmosphere.stratopause
 		M = Atmosphere.mesopause
+		plasma: (height) ->
+			0.05
 		cloud: (height) ->
 			# return 1
 			if height < NF then 1
@@ -63,18 +69,19 @@ Config =
 			else 0
 		balloon: (height) ->
 			if height < NF then 0
-			else if height < T then 0.75
-			else if height < S then 0.15
+			else if height < T then 0.8
+			else if height < S then lerp(0.8, 0.4, (height-T)/S)
 			else 0
 		satellite: (height) ->
-			if height < S then 0
-			else 0.75
+			if height < T then 0
+			else if height < S then lerp(0.1, 4.0, (height-T)/S)
+			else 4.0
 		cookie: (height) ->
-			base = 0.2
+			base = 0.25
 			if height < NF then 0
-			else if height < S then 0.1
-			else if height < M then base
-			else base + (height - M) / M
+		
+			else if height < S then base
+			else base + (height - S) / S
 
 	images:
 		star: new ImageResource 'img/star-32.png'

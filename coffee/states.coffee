@@ -17,6 +17,7 @@ class PlayState extends GameState
 	stars: null
 	branches: null
 	intervals: null
+	totalObstaclesAllTime: 0
 
 	constructor: ->
 		numRainbowColors = 256
@@ -70,7 +71,7 @@ class PlayState extends GameState
 		t.update(dt) for t in @obstacles
 		t.update(dt) for t in @powerups
 		t.update(dt) for t in @clouds
-		PlasmaCloud.update(dt)
+		# PlasmaCloud.update(dt)
 
 		@addObstacles(dt)
 
@@ -185,8 +186,8 @@ class PlayState extends GameState
 
 		make = (klass, vel) =>
 			new klass randomSpotOffscreen(klass.spriteImage.image.height), vel
-
-		prob Config.probability.cloud, =>
+		prevObstacleCount = @obstacles.length
+		prob Config.probability.plasma, =>
 			@powerups.push (new PlasmaCloud randomSpotOffscreen(PlasmaCloud.canvas.height), new Vec(_.random(0, 2), 0) )
 		prob Config.probability.cloud, =>
 			@clouds.push make Cloud, new Vec(_.random(2, 5), 0)
@@ -196,7 +197,14 @@ class PlayState extends GameState
 			@obstacles.push make Satellite, new Vec(_.random(-2, 2), 0)
 		prob Config.probability.cookie, =>
 			@obstacles.push make Cookie, new Vec(_.random(-2, 2), 0)
+		@totalObstaclesAllTime += @obstacles.length - prevObstacleCount
 
+		opp = Config.obstaclesPerPlasmaCloud
+		if (@prevObstaclesAllTime % opp) > (@totalObstaclesAllTime % opp)
+			@powerups.push (new PlasmaCloud randomSpotOffscreen(PlasmaCloud.canvas.height), new Vec(_.random(0, 2), 0) )
+
+		@prevObstaclesAllTime = @totalObstaclesAllTime
+			
 	transition: ->
 		if @stars.length == 0
 			@game.pushState new GameOverState

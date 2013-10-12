@@ -1,5 +1,5 @@
 (function() {
-  var Atmosphere, Balloon, Branch, Cloud, Collidable, Config, Cookie, GFX, GameEngine, GameOverState, GameState, ImageResource, InfoState, M, Module, NotImplemented, Nova, Obstacle, PlasmaCloud, PlayState, Powerup, Quad, QuadtreeBox, Satellite, SoundSystem, Sprite, Star, Thing, TitleState, Vec, Viewport, atmoscale, clampAngleSigned, globals, i, lerp, makeImage, withImage, withImages, _ref, _ref1, _ref2,
+  var Atmosphere, Balloon, Branch, Cloud, Collidable, Config, Cookie, GFX, GameEngine, GameOverState, GameState, ImageResource, InfoState, M, Module, NotImplemented, Nova, Obstacle, PlasmaCloud, PlayState, Powerup, Quad, QuadtreeBox, Satellite, SoundSystem, Sprite, Star, Thing, TitleState, VERSION, Vec, Viewport, atmoscale, clampAngleSigned, globals, i, lerp, makeImage, withImage, withImages, _ref, _ref1, _ref2,
     __slice = [].slice,
     __indexOf = [].indexOf || function(item) { for (var i = 0, l = this.length; i < l; i++) { if (i in this && this[i] === item) return i; } return -1; },
     _this = this,
@@ -838,6 +838,8 @@
     thermopause: 500000 * atmoscale
   };
 
+  VERSION = 0.1;
+
   Config = {
     mainFont: 'Monoton',
     hudFont: 'Offside',
@@ -861,6 +863,7 @@
     novaStrokeWidth: 8,
     novaMaxRadius: 2000,
     novaExplosionSpeed: 200,
+    obstaclesPerPlasmaCloud: 8,
     mergeDrawTime: 0.5,
     gameOverSlowdown: 0.2,
     autokillTolerance: {
@@ -874,6 +877,9 @@
       S = Atmosphere.stratopause;
       M = Atmosphere.mesopause;
       return {
+        plasma: function(height) {
+          return 0.05;
+        },
         cloud: function(height) {
           if (height < NF) {
             return 1;
@@ -891,31 +897,31 @@
           if (height < NF) {
             return 0;
           } else if (height < T) {
-            return 0.75;
+            return 0.8;
           } else if (height < S) {
-            return 0.15;
+            return lerp(0.8, 0.4, (height - T) / S);
           } else {
             return 0;
           }
         },
         satellite: function(height) {
-          if (height < S) {
+          if (height < T) {
             return 0;
+          } else if (height < S) {
+            return lerp(0.1, 4.0, (height - T) / S);
           } else {
-            return 0.75;
+            return 4.0;
           }
         },
         cookie: function(height) {
           var base;
-          base = 0.2;
+          base = 0.25;
           if (height < NF) {
             return 0;
           } else if (height < S) {
-            return 0.1;
-          } else if (height < M) {
             return base;
           } else {
-            return base + (height - M) / M;
+            return base + (height - S) / S;
           }
         }
       };
@@ -1584,6 +1590,8 @@
 
     PlayState.prototype.intervals = null;
 
+    PlayState.prototype.totalObstaclesAllTime = 0;
+
     function PlayState() {
       var numRainbowColors, p;
       numRainbowColors = 256;
@@ -1654,7 +1662,6 @@
         t = _ref4[_l];
         t.update(dt);
       }
-      PlasmaCloud.update(dt);
       this.addObstacles(dt);
       _ref5 = this.stars;
       for (_m = 0, _len4 = _ref5.length; _m < _len4; _m++) {
@@ -1811,7 +1818,7 @@
     };
 
     PlayState.prototype.addObstacles = function(dt) {
-      var make, prob, randomSpotOffscreen, viewQuad, viewVolume,
+      var make, opp, prevObstacleCount, prob, randomSpotOffscreen, viewQuad, viewVolume,
         _this = this;
       viewQuad = this.view.worldQuad();
       viewVolume = viewQuad.width() * viewQuad.height();
@@ -1834,7 +1841,8 @@
       make = function(klass, vel) {
         return new klass(randomSpotOffscreen(klass.spriteImage.image.height), vel);
       };
-      prob(Config.probability.cloud, function() {
+      prevObstacleCount = this.obstacles.length;
+      prob(Config.probability.plasma, function() {
         return _this.powerups.push(new PlasmaCloud(randomSpotOffscreen(PlasmaCloud.canvas.height), new Vec(_.random(0, 2), 0)));
       });
       prob(Config.probability.cloud, function() {
@@ -1846,9 +1854,15 @@
       prob(Config.probability.satellite, function() {
         return _this.obstacles.push(make(Satellite, new Vec(_.random(-2, 2), 0)));
       });
-      return prob(Config.probability.cookie, function() {
+      prob(Config.probability.cookie, function() {
         return _this.obstacles.push(make(Cookie, new Vec(_.random(-2, 2), 0)));
       });
+      this.totalObstaclesAllTime += this.obstacles.length - prevObstacleCount;
+      opp = Config.obstaclesPerPlasmaCloud;
+      if ((this.prevObstaclesAllTime % opp) > (this.totalObstaclesAllTime % opp)) {
+        this.powerups.push(new PlasmaCloud(randomSpotOffscreen(PlasmaCloud.canvas.height), new Vec(_.random(0, 2), 0)));
+      }
+      return this.prevObstaclesAllTime = this.totalObstaclesAllTime;
     };
 
     PlayState.prototype.transition = function() {
@@ -2348,6 +2362,9 @@
     get: function() {
       var all;
       all = $.parseJSON(localStorage.getItem('high_scores')) || [];
+      all = all.filter(function(a) {
+        return a.version === VERSION;
+      });
       return all.slice(0, Config.maxHighScores).sort(function(a, b) {
         return b.score - a.score;
       });
@@ -2357,6 +2374,7 @@
     },
     add: function(data) {
       var all;
+      data.version = VERSION;
       all = this.get();
       all.push(data);
       all.sort(function(a, b) {
