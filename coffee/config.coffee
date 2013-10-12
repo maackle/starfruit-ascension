@@ -59,7 +59,7 @@ Config =
 		S = Atmosphere.stratopause
 		M = Atmosphere.mesopause
 		plasma: (height) ->
-			0.05
+			0.25
 		cloud: (height) ->
 			# return 1
 			if height < NF then 1

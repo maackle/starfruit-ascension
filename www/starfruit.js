@@ -878,7 +878,7 @@
       M = Atmosphere.mesopause;
       return {
         plasma: function(height) {
-          return 0.05;
+          return 0.25;
         },
         cloud: function(height) {
           if (height < NF) {
