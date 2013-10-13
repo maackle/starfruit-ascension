@@ -204,7 +204,7 @@ class PlayState extends GameState
 			@powerups.push (new PlasmaCloud randomSpotOffscreen(PlasmaCloud.canvas.height), new Vec(_.random(0, 2), 0) )
 
 		@prevObstaclesAllTime = @totalObstaclesAllTime
-			
+
 	transition: ->
 		if @stars.length == 0
 			@game.pushState new GameOverState
@@ -401,12 +401,18 @@ class GameOverState extends InfoState
 		
 
 	enter: ->
+		for i in [0..10]
+			Scores.add
+				score: 1
+				name: 'bad'
+				altitude: 1
+				version: VERSION
 		@view = @parent.viewHUD
 		score = parseInt(@parent.score)
 		altitude = @parent.altitude
 		scores = Scores.get()
 		if scores.length >= Config.maxHighScores
-			lowest = scores[Config.maxHighScores - 1]
+			lowest = scores[Config.maxHighScores - 1].score
 		else
 			lowest = 0
 		@newRecord = score > lowest

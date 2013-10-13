@@ -2211,14 +2211,22 @@
     GameOverState.prototype.initialize = function() {};
 
     GameOverState.prototype.enter = function() {
-      var altitude, delay, html, line, lines, lowest, score, scores, _fn, _i, _len,
+      var altitude, delay, html, line, lines, lowest, score, scores, _fn, _i, _j, _len,
         _this = this;
+      for (i = _i = 0; _i <= 10; i = ++_i) {
+        Scores.add({
+          score: 1,
+          name: 'bad',
+          altitude: 1,
+          version: VERSION
+        });
+      }
       this.view = this.parent.viewHUD;
       score = parseInt(this.parent.score);
       altitude = this.parent.altitude;
       scores = Scores.get();
       if (scores.length >= Config.maxHighScores) {
-        lowest = scores[Config.maxHighScores - 1];
+        lowest = scores[Config.maxHighScores - 1].score;
       } else {
         lowest = 0;
       }
@@ -2233,7 +2241,7 @@
           }, 1000);
         }, (i + 1) * delay));
       };
-      for (i = _i = 0, _len = lines.length; _i < _len; i = ++_i) {
+      for (i = _j = 0, _len = lines.length; _j < _len; i = ++_j) {
         line = lines[i];
         _fn(line, i);
       }
